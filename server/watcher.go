@@ -23,7 +23,7 @@ const (
 	// Send pings to client with this period. Must be less than pongWait.
 	pingPeriod = (pongWait * 9) / 10
 	// Poll file for changes with this period.
-	filePeriod = 10 * time.Second
+	filePeriod = 2 * time.Second
 )
 
 var (
@@ -117,6 +117,7 @@ func watcherServer() {
 	// at the home that client then connects as a socket to /ws where
 	// it then takes in the read and rewrites
 	r.GET("/", serveWs)
+
 	if err := r.Run(*addr); err != nil {
 		log.Fatal(err)
 	}
