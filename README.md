@@ -1,8 +1,6 @@
 ---
-title: { { go-watcher } }
+title: sync
 author: [Robel A.E. Schwarz]
-date: { { 2024-09-23 } }
-tags: []
 sources:
   [
     https://medium.com/@abhishekranjandev/building-a-production-grade-websocket-for-notifications-with-golang-and-gin-a-detailed-guide-5b676dcfbd5a,
@@ -69,40 +67,6 @@ differences when syncing.
 Even with the file transfer system, I need to atleast keep track of the movement of the files/
 what their names are so I do not re download the entire file system each time a file change is made
 
-### File transfer over Gin
-
-In Go, using the Gin web framework, you can send a file to the client by using the `Context.File()` method, which sends the specified file as an HTTP response. Below is an example of how you might set up a Gin HTTP server with an endpoint to send a file:
-
-```go
-package main
-import (
-	"github.com/gin-gonic/gin"
-	"net/http"
-)
-func main() {
-	// Initialize the Gin router
-	router := gin.Default()
-	// Define a route that sends a file when accessed
-	router.GET("/file", func(c *gin.Context) {
-		// Specify the file path
-		filePath := "path/to/your/file.txt"
-		// Check if the file exists and if it is not a directory before sending
-		if _, err := os.Stat(filePath); err == nil {
-			c.File(filePath)
-		} else {
-			// If there's an error (like file not found), return an HTTP 404 status
-			c.AbortWithStatus(http.StatusNotFound)
-		}
-	})
-	// Run the server on port 8080
-	router.Run(":8080")
-}
-```
-
-In this example, when a client sends a GET request to `http://localhost:8080/file`, the server will respond by sending the file located at `path/to/your/file.txt`. If the file does not exist, the server will respond with a 404 Not Found status.
-Make sure to replace `path/to/your/file.txt` with the actual path to the file you want to serve.
-To run this code, you need to have the Gin package installed. If you haven't already installed Gin, you can get it using the following command:
-
 2. Solution 2:
    When a file is changed for the server, for each client send out the difference
 
@@ -118,155 +82,6 @@ To run this code, you need to have the Gin package installed. If you haven't alr
 
    How do I file version?
 
-### Versioning in Go
-
-In Go, handling file versions typically involves implementing a system to manage different versions of a file, often by saving each version with a unique identifier, such as a timestamp or version number. Here's a basic approach to creating a file versioning system in Go:
-
-1. **Define a Naming Convention**: Decide on a naming convention for your file versions. For example, you might append a timestamp or an incremental version number to the file's name.
-2. **Save New Versions**: When saving a new version of a file, use the naming convention to create a new file rather than overwriting the existing one.
-3. **List Versions**: Implement a function to list all versions of a file.
-4. **Retrieve a Specific Version**: Implement a function to retrieve a specific version of a file based on its unique identifier.
-   Here's an example of how you might implement a simple file versioning system in Go:
-
-```go
-package main
-import (
-	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"time"
-)
-// saveVersion saves a new version of the file with the current timestamp.
-func saveVersion(filePath string, data []byte) error {
-	dir := filepath.Dir(filePath)
-	base := filepath.Base(filePath)
-	ext := filepath.Ext(filePath)
-	name := base[0 : len(base)-len(ext)]
-	version := time.Now().Format("20060102T150405") // YYYYMMDDTHHMMSS format
-	newFileName := fmt.Sprintf("%s_%s%s", name, version, ext)
-	newFilePath := filepath.Join(dir, newFileName)
-	return ioutil.WriteFile(newFilePath, data, 0644)
-}
-// listVersions lists all versions of a file in the directory.
-func listVersions(filePath string) ([]string, error) {
-	dir := filepath.Dir(filePath)
-	base := filepath.Base(filePath)
-	ext := filepath.Ext(filePath)
-	name := base[0 : len(base)-len(ext)]
-	pattern := fmt.Sprintf("%s_*%s", name, ext)
-	files, err := filepath.Glob(filepath.Join(dir, pattern))
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
-}
-func main() {
-	// Example usage
-	filePath := "example.txt"
-	data := []byte("This is some file content.")
-	// Save a new version of the file
-	if err := saveVersion(filePath, data); err != nil {
-		fmt.Println("Error saving version:", err)
-		return
-	}
-	// List all versions of the file
-	versions, err := listVersions(filePath)
-	if err != nil {
-		fmt.Println("Error listing versions:", err)
-		return
-	}
-	fmt.Println("Versions of the file:")
-	for _, v := range versions {
-		fmt.Println(v)
-	}
-}
-```
-
-In this example, the `saveVersion` function saves a new version of the file with a timestamp appended to the file name. The `listVersions` function lists all versions of the file based on the naming pattern.
-This is a basic example, and a real-world application might require more features, such as version deletion, rollback, metadata storage, and more sophisticated error handling. You might also want to consider using a database to track file versions and metadata if your application requires complex versioning capabilities.
-
-### File Ledger of changes
-
-To keep a ledger of changes made to a file in Go, you can implement a system that records each change along with metadata such as timestamps, user information, and a description of the change. This ledger can be stored in a separate file, a database, or any other persistent storage system.
-Here's a simple example of how you might implement a file change ledger using a JSON file to store the change records:
-
-```go
-package main
-import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"os"
-	"time"
-)
-// ChangeRecord represents a single change made to the file.
-type ChangeRecord struct {
-	Timestamp   time.Time `json:"timestamp"`
-	User        string    `json:"user"`
-	Description string    `json:"description"`
-}
-// Ledger represents a list of change records.
-type Ledger struct {
-	Records []ChangeRecord `json:"records"`
-}
-// AddRecord adds a new change record to the ledger.
-func (l *Ledger) AddRecord(user, description string) {
-	record := ChangeRecord{
-		Timestamp:   time.Now(),
-		User:        user,
-		Description: description,
-	}
-	l.Records = append(l.Records, record)
-}
-// Save writes the ledger to a JSON file.
-func (l *Ledger) Save(filePath string) error {
-	data, err := json.MarshalIndent(l, "", "  ")
-	if err != nil {
-		return err
-	}
-	return ioutil.WriteFile(filePath, data, 0644)
-}
-// LoadLedger loads the ledger from a JSON file.
-func LoadLedger(filePath string) (*Ledger, error) {
-	data, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		return nil, err
-	}
-	var ledger Ledger
-	err = json.Unmarshal(data, &ledger)
-	if err != nil {
-		return nil, err
-	}
-	return &ledger, nil
-}
-func main() {
-	ledgerFile := "ledger.json"
-	// Load the existing ledger or create a new one if it doesn't exist
-	ledger, err := LoadLedger(ledgerFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			ledger = &Ledger{}
-		} else {
-			fmt.Println("Error loading ledger:", err)
-			return
-		}
-	}
-	// Add a new record to the ledger
-	ledger.AddRecord("username", "Made some changes to the file")
-	// Save the updated ledger
-	if err := ledger.Save(ledgerFile); err != nil {
-		fmt.Println("Error saving ledger:", err)
-		return
-	}
-	fmt.Println("Ledger updated successfully.")
-}
-```
-
-In this example, we define two structs: `ChangeRecord` to represent individual changes and `Ledger` to represent the entire ledger. The `Ledger` struct has methods to add a new record and save the ledger to a JSON file. We also have a `LoadLedger` function to load the ledger from a file.
-The `main` function demonstrates how to load an existing ledger, add a new change record, and save the updated ledger back to the file.
-This is a basic implementation, and depending on your requirements, you might want to add more features, such as error handling for concurrent access, a more sophisticated storage system, or the ability to revert changes.
-
 # Implementation Plan
 
 The first thing that Is required effectively for both solutions is file versioning and send out what changes where made and to which files they were made to.
@@ -275,18 +90,59 @@ The first thing that Is required effectively for both solutions is file versioni
 
   - the directory versioning would update very 6hrs -> 12hrs and would be a master snap shot of all the file versions
     uploaded to the server
-
+    - the directory versioning would also be able to handle file movement/renaming/and deletion
     - this would handle the problem of what happens when a client has not connected to the server for a few days
       the client would iterate through the changes made in the ledger of the client and server to point to the
       file changes.
+    - each of the file versions would have to have a timestamp ID and what changes were made to the file
 
-    - the directory versioning would also be able to handle file movement/renaming/and deletion
+## Data Structures
 
-## Action Items
+To keep track of these versioning, I need the project to be hooked up to a database.
+In terms of data structures and what the database might look like.
 
-1. Action Item 1:
-2. Action Item 2:
-3. Action Item 3:
+```json directory
+{
+  "timestamp": "2022-01-01 00:00:00",
+  "files-changed": [
+    <!--for-each file changed index 0 is the old version and index 1 is the new-->
+    "file-name": ["file{name}{timestamp}", "version-2"]
+  ],
+  "files-deleted": [
+    "file-name1"
+    "file-name2"
+  ]
+}
+```
+
+```json file
+{
+  "id": "<the uuid of the file>",
+  "file-name": "<name of the file given from the user",
+  "contents": "<contents of the file>",
+  "location": "<location of the file in the directory",
+  "changes": ["file-change1", "file-change..."]
+}
+```
+
+```json file-change-{timestamp}
+{
+  it might be better to just use the time stamp as part of the version name
+  <!--"timestamp": "2022-01-01 00:00:00"-->
+  "device":"<device of where the change was made from>",
+  "file-diff": "<content changes of the file"
+}
+```
+
+> I am probably going to use mongodb since Ion really know anything else that well and I don't
+> feel like adding to the learning curve of this project.
+
+## Todo Items
+
+- [ ] attach the directory watch system to the socket server
+- [ ] create a socket message that downloads the file from client to server and vise versa
+- [ ] send the file changes over json
+- [ ] attach go to mongodb
 
 # Risks and Challenges
 
