@@ -132,16 +132,13 @@ In terms of data structures and what the database might look like.
 }
 ```
 
-> I am probably going to use mongodb since Ion really know anything else that well and I don't
-> feel like adding to the learning curve of this project.
-
 ## Todo Items
 
-- [ ] attach the directory watch to the client
-
-- [x] create a socket message that downloads the file from client to server and vise versa
-- [ ] send the file changes over json
-- [x] attach go to mongodb
+- [x] attach the directory watch to the client
+- [ ] create a socket message that downloads the file from client to server and vise versa
+- [x] attach go to sqlite
+  - [ ]create the data structures for sqlite and how to query them
+  - [ ] make a on start call that populates sqlite with the un-tracked files
 
 # Risks and Challenges
 
