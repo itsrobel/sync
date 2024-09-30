@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"fmt"
@@ -6,20 +6,11 @@ import (
 	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/gorilla/websocket"
 )
 
-// func main() {
-// 	watcher()
-// }
-
-// func websocket() {
-//
-//
-// }
-
-// what else do I need the watcher to do?
 // the watcher should be a web server that handle client requests to then update the client version of the file
-func folderwatcher() {
+func dirWatcher(ws *websocket.Conn) {
 	// Create a new watcher
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -36,6 +27,11 @@ func folderwatcher() {
 					return
 				}
 				log.Println("event:", event)
+
+				if err := ws.WriteMessage(websocket.TextMessage, []byte(event.Name)); err != nil {
+					return
+				}
+				// NOTE: this is only checking for write events in teh file system
 				if event.Op&fsnotify.Write == fsnotify.Write {
 					log.Println("modified file:", event.Name)
 				}
@@ -44,6 +40,7 @@ func folderwatcher() {
 					return
 				}
 				log.Println("error:", err)
+
 			}
 		}
 	}()

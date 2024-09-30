@@ -12,8 +12,6 @@ sources:
 
 This is less of a Readme and more a design document for the development of this project
 
-# go-watcher
-
 # Issue Identification
 
 I need a way to sync my notes to replace obsidian sync (go)
@@ -139,10 +137,11 @@ In terms of data structures and what the database might look like.
 
 ## Todo Items
 
-- [ ] attach the directory watch system to the socket server
-- [ ] create a socket message that downloads the file from client to server and vise versa
+- [ ] attach the directory watch to the client
+
+- [x] create a socket message that downloads the file from client to server and vise versa
 - [ ] send the file changes over json
-- [ ] attach go to mongodb
+- [x] attach go to mongodb
 
 # Risks and Challenges
 
