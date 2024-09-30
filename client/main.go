@@ -1,29 +1,33 @@
-package client
+package main
 
 import (
-	"flag"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 
 	"github.com/gorilla/websocket"
 )
 
 func main() {
-	syncClient()
+	// syncClient()
+	err := fileRetrieveFromServer("index.md")
+	if err != nil {
+		fmt.Printf("Error downloading file: %v\n", err)
+	}
 }
 
-var addr = flag.String("addr", "localhost:8080", "http service address")
+var addr = "localhost:8080"
 
 func syncClient() {
-	flag.Parse()
-	log.SetFlags(0)
-
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/"}
+	u := url.URL{Scheme: "ws", Host: addr, Path: "/"}
 	log.Printf("connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
@@ -63,4 +67,37 @@ func syncClient() {
 			return
 		}
 	}
+}
+
+// func fileDownload() //This just has to be get request to the server
+func fileRetrieveFromServer(fileID string) error {
+	serverURL := fmt.Sprintf("http://%s", addr)
+
+	url := fmt.Sprintf("%s/emit/%s", serverURL, fileID)
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("error making GET request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	// Create the file
+	outputPath := filepath.Join("content", fileID)
+	out, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("error creating file: %v", err)
+	}
+	defer out.Close()
+
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		return fmt.Errorf("error writing to file: %v", err)
+	}
+
+	fmt.Printf("File downloaded successfully: %s\n", outputPath)
+	return nil
 }

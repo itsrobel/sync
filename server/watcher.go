@@ -1,4 +1,4 @@
-package server
+package main
 
 import (
 	"fmt"
@@ -46,7 +46,9 @@ func dirWatcher(ws *websocket.Conn) {
 	}()
 
 	// Add a path to watch
-	path, _ := filepath.Abs("./content")
+	//
+	//
+	path, _ := filepath.Abs(fmt.Sprintf("./%s", directory))
 	err = watcher.Add(path)
 	if err != nil {
 		log.Fatal(err)
