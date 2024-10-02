@@ -210,13 +210,19 @@ when I take databases. Or I will just migrate this project later
    Replace `"mongodb://localhost:27017"` with the URI of your MongoDB instance. If you're connecting to a MongoDB Atlas cluster, you'll need to use the connection string provided in your Atlas dashboard, which will include your username, password, and cluster details.
 4. **Use the client**:
    Once connected, you can use the `client` object to interact with your MongoDB databases and collections. For example, to insert a document into a collection:
+
    ```go
    collection := client.Database("testdb").Collection("testcollection")
    doc := bson.D{{"name", "John Doe"}, {"age", 30}}
    result, err := collection.InsertOne(ctx, doc)
    if err != nil {
-       log.Fatal(err)
+   	log.Fatal(err)
    }
    fmt.Printf("Inserted document with ID: %v\n", result.InsertedID)
+
+
    ```
+
    Remember to handle errors and context timeouts appropriately in a production environment. The above example uses `context.TODO()` and `context.WithTimeout()` to create contexts with and without timeouts, respectively. You should use a proper context with a timeout for real applications.
+
+https://www.mongodb.com/docs/drivers/go/current/fundamentals/bson/
