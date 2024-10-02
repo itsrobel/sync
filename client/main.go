@@ -15,10 +15,11 @@ import (
 
 func main() {
 	// syncClient()
-	err := fileRetrieveFromServer("index.md")
-	if err != nil {
-		fmt.Printf("Error downloading file: %v\n", err)
-	}
+	// err := fileRetrieveFromServer("index.md")
+	// if err != nil {
+	// 	fmt.Printf("Error downloading file: %v\n", err)
+	// }
+	connectMongo()
 }
 
 var addr = "localhost:8080"

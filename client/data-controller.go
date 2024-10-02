@@ -1,62 +1,51 @@
 package main
 
 import (
-	"database/sql"
+	"context"
+	"fmt"
 	"log"
+	"time"
 
-	_ "github.com/mattn/go-sqlite3" // Import go-sqlite3 library
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func databaseConnection() {
-	db, err := sql.Open("sqlite3", "./sync.db")
+// make this return the conenction
+func connectMongo() (*mongo.Client, context.Context) {
+	// Set client options
+	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	// Connect to MongoDB
+	client, err := mongo.Connect(context.TODO(), clientOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	// Check the connection
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err = client.Ping(ctx, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Connected to MongoDB!")
+	return client, ctx
 }
 
-// 	// Open the SQLite database file
-// 	db, err := sql.Open("sqlite3", "./sync.db")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer db.Close()
-// 	// Create a table
-// 	sqlStmt := `
-//     CREATE TABLE IF NOT EXISTS userinfo (
-//         id INTEGER PRIMARY KEY AUTOINCREMENT,
-//         username TEXT NOT NULL,
-//         created_at DATETIME
-//     );
-//     `
-// 	_, err = db.Exec(sqlStmt)
-// 	if err != nil {
-// 		log.Printf("%q: %s\n", err, sqlStmt)
-// 		return
-// 	}
-// 	// Insert a new user
-// 	_, err = db.Exec("INSERT INTO userinfo(username, created_at) VALUES(?, ?)", "johndoe", "2023-04-01")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	// Query the database
-// 	rows, err := db.Query("SELECT id, username, created_at FROM userinfo")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer rows.Close()
-// 	for rows.Next() {
-// 		var id int
-// 		var username string
-// 		var createdAt string
-// 		err = rows.Scan(&id, &username, &createdAt)
-// 		if err != nil {
-// 			log.Fatal(err)
-// 		}
-// 		log.Println(id, username, createdAt)
-// 	}
-// 	err = rows.Err()
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// }
+func testMongo() {
+	// Don't forget to close the connection when you're done
+	client, ctx := connectMongo()
+
+	collection := client.Database("testdb").Collection("testcollection")
+	doc := bson.D{{"name", "John Doe"}, {"age", 30}}
+	result, err := collection.InsertOne(ctx, doc)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Inserted document with ID: %v\n", result.InsertedID)
+
+	defer func() {
+		if err = client.Disconnect(ctx); err != nil {
+			log.Fatal(err)
+		}
+	}()
+}
