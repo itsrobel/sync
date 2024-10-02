@@ -99,43 +99,43 @@ The first thing that Is required effectively for both solutions is file versioni
 To keep track of these versioning, I need the project to be hooked up to a database.
 In terms of data structures and what the database might look like.
 
-```json directory
-{
-  "timestamp": "2022-01-01 00:00:00",
-  "files-changed": [
-    <!--for-each file changed index 0 is the old version and index 1 is the new-->
-    "file-name": ["file{name}{timestamp}", "version-2"]
-  ],
-  "files-deleted": [
-    "file-name1"
-    "file-name2"
-  ]
-}
-```
+How do I handle non markdown files?
 
 ```json file
 {
   "id": "<the uuid of the file>",
   "file-name": "<name of the file given from the user",
-  "contents": "<contents of the file>",
   "location": "<location of the file in the directory",
-  "changes": ["file-change1", "file-change..."]
+  "contents": "<contents of the file>",
+  "status": "<active/deleted>"
 }
 ```
 
+Any changes from the user from the client would be made to the
+would point to the id of the file by searching with the location string
+
+If the file is renamed on the server and tries to be synced, if the
+file id matches then the location of the latest timestamp is taken
+
+The ID system can be used for conflict resolution
+
 ```json file-change-{timestamp}
 {
-  it might be better to just use the time stamp as part of the version name
-  <!--"timestamp": "2022-01-01 00:00:00"-->
-  "device":"<device of where the change was made from>",
-  "file-diff": "<content changes of the file"
+  "device": "<device of where the change was made from>",
+  "id": "<the id of the file>",
+  "location": "<location of the file",
+  "file-diff": "<content changes of the file>",
+  "status": "<deleted/moved/edited>"
 }
 ```
+
+If the file status is deleted for more than 30 days or some shit I can remove the contents and the ID from the sql table
 
 ## Todo Items
 
 - [x] attach the directory watch to the client
 - [ ] create a socket message that downloads the file from client to server and vise versa
+- [ ] figure out how to do file difs
 - [x] attach go to sqlite
   - [ ]create the data structures for sqlite and how to query them
   - [ ] make a on start call that populates sqlite with the un-tracked files
