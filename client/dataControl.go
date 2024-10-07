@@ -6,10 +6,25 @@ import (
 	"log"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+// NOTE: ID's are created by default
+// time?
+type File struct {
+	contents string
+	location string
+	active   bool // this can decide whether or not to sync
+}
+
+// TODO: when a file is change it can write a change log and then
+// write to the file to update
+type FileChange struct {
+	location string // This is the current location of the file when the change happens
+	fileId   int64  // This is the id file of the file we are writing to
+	active   bool
+}
 
 // make this return the conenction
 func connectMongo() (*mongo.Client, context.Context) {
@@ -31,13 +46,12 @@ func connectMongo() (*mongo.Client, context.Context) {
 	return client, ctx
 }
 
-func testMongo() {
-	// Don't forget to close the connection when you're done
+func createFile(location string, active bool, contents string) {
 	client, ctx := connectMongo()
+	collection := client.Database("sync").Collection("client")
+	file := File{location: location, active: active, contents: contents}
 
-	collection := client.Database("testdb").Collection("testcollection")
-	doc := bson.D{{"name", "John Doe"}, {"age", 30}}
-	result, err := collection.InsertOne(ctx, doc)
+	result, err := collection.InsertOne(ctx, file)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -48,4 +62,8 @@ func testMongo() {
 			log.Fatal(err)
 		}
 	}()
+}
+
+// TODO: I need to figure out what information I can get from the file watch
+func updateFile(location string) {
 }

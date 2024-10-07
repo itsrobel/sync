@@ -225,4 +225,11 @@ when I take databases. Or I will just migrate this project later
 
    Remember to handle errors and context timeouts appropriately in a production environment. The above example uses `context.TODO()` and `context.WithTimeout()` to create contexts with and without timeouts, respectively. You should use a proper context with a timeout for real applications.
 
-https://www.mongodb.com/docs/drivers/go/current/fundamentals/bson/
+When I change the file location, I should be able to capture the previous location
+and write to the new location
+
+Mongodb go driver functions
+
+- [bson](https://www.mongodb.com/docs/drivers/go/current/fundamentals/bson/)
+- [gridfs](https://www.mongodb.com/docs/drivers/go/current/fundamentals/gridfs/)
+- [mongodb curd](https://www.mongodb.com/docs/drivers/go/current/fundamentals/crud/)

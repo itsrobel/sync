@@ -39,6 +39,9 @@ func syncServer() {
 	r.POST("/upload", fileUpload)
 	r.GET("/emit/:id", fileEmit)
 
+	// client, context := connectMongo()
+	dirWatcher()
+
 	if err := r.Run(addr); err != nil {
 		log.Fatal(err)
 	}
@@ -60,7 +63,8 @@ func serveWs(c *gin.Context) {
 
 	// go writer(ws, lastMod)
 	// NOTE: the loop itself it handled by the function
-	dirWatcher(ws)
+	//
+	// dirWatcher(ws)
 	reader(ws)
 }
 

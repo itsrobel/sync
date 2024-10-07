@@ -19,7 +19,7 @@ func main() {
 	// if err != nil {
 	// 	fmt.Printf("Error downloading file: %v\n", err)
 	// }
-	connectMongo()
+	syncClient()
 }
 
 var addr = "localhost:8080"
