@@ -134,7 +134,7 @@ How do I handle non markdown files?
   "id": "<the uuid of the file>",
   "file-name": "<name of the file given from the user",
   "location": "<location of the file in the directory",
-  "contents": "<contents of the file>",
+  "[contents](2024-10-07_contents.md)": "<contents of the file>",
   "status": "<active/deleted>"
 }
 ```
@@ -231,5 +231,5 @@ and write to the new location
 Mongodb go driver functions
 
 - [bson](https://www.mongodb.com/docs/drivers/go/current/fundamentals/bson/)
-- [gridfs](https://www.mongodb.com/docs/drivers/go/current/fundamentals/gridfs/)
+- [gridfs](https://www.mongodb.com/docs/drivers/go/current/fundamentals/gridfs/)data
 - [mongodb curd](https://www.mongodb.com/docs/drivers/go/current/fundamentals/crud/)

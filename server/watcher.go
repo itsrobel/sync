@@ -70,12 +70,25 @@ func dirWatcherWS(ws *websocket.Conn) { // Create a new watcher
 // / mongoDB connection should be passed in
 func dirWatcher() {
 	// Create a new watcher
-	client, ctx := connectMongo()
-
+	client, _ := connectMongo()
 	watcher, err := fsnotify.NewWatcher()
+	collection := client.Database("sync").Collection("server")
+	documents, _ := getAllDocuments(collection)
+	//
+	//j
+
+	// deletedCount, _ := deleteAllDocuments(collection)
+	// fmt.Printf("Deleted %d documents\n", deletedCount)
+
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Print the documents
+	for _, doc := range documents {
+		fmt.Println(doc)
+	}
+
 	defer watcher.Close()
 
 	// Start listening for events
@@ -88,20 +101,28 @@ func dirWatcher() {
 				}
 				// NOTE: when a file is created its not going to have a value
 
-				if event.Op == fsnotify.Create {
-					// log.Println("event:", event)
-					createFile(client, ctx, event.Name)
+				if (event.Op == fsnotify.Create) && validFileExtension(event.Name) {
+					log.Println("valid event location:", event)
+					createFile(collection, event.Name)
 				}
+
+				// if ()
 
 				// if err := ws.WriteMessage(websocket.TextMessage, []byte(event.Name)); err != nil {
 				// 	return
 				// NOTE: this is only checking for write events in the file system
 				// }
 
-				// if event.Op&fsnotify.Write == fsnotify.Write {
-				// 	log.Println("modified file:", event.Name)
-				// 	findFile(client, ctx, event.Name)
-				// }
+				if (event.Op&fsnotify.Write == fsnotify.Write) && validFileExtension(event.Name) {
+					log.Println("modified file:", event.Name)
+
+					file, err := findFile(collection, event.Name)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					fmt.Printf("Found file: %+v\n", file)
+				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
 					return

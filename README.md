@@ -134,11 +134,13 @@ If the file status is deleted for more than 30 days or some shit I can remove th
 ## Todo Items
 
 - [x] attach the directory watch to the client
+- [ ] move the project into using gRPC since it fixes most of my problems
+
 - [ ] create a socket message that downloads the file from client to server and vise versa
 - [ ] figure out how to do file difs
-- [x] attach go to sqlite
-  - [ ]create the data structures for sqlite and how to query them
-  - [ ] make a on start call that populates sqlite with the un-tracked files
+- [x] attach go to database
+  - [ ]create the data structures for database and how to query them
+  - [ ] make a on start call that populates database with the un-tracked files
 
 # Risks and Challenges
 
