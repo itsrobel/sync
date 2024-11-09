@@ -29,10 +29,11 @@ type server struct {
 // StreamFiles: Bidirectional streaming that handles both uploads and downloads.
 func (s *server) StreamFiles(stream pb.FileService_StreamFilesServer) error {
 	clientID := uuid.NewString() // Generate a unique ID for each client connection
+	log.Println("clientID: ", clientID)
+	ctx := stream.Context()
 
 	s.mu.Lock()
 	s.clients[clientID] = stream // Register client stream
-	log.Println("clientID: ", clientID)
 	s.mu.Unlock()
 
 	defer func() {
@@ -41,25 +42,28 @@ func (s *server) StreamFiles(stream pb.FileService_StreamFilesServer) error {
 		s.mu.Unlock()
 	}()
 
-	// var  filename string
-
-	go func() {
-		for {
-			req, err := stream.Recv() // Receive file data from client (for upload)
-			if err == io.EOF {
-				log.Println("File upload completed.")
-				return // End of stream; close connection gracefully.
-			}
-			if err != nil {
-				log.Printf("Error receiving data from client: %v", err)
-				return
-			}
-			if req.Content != nil { // Client is uploading a file
-				s.handleFileUpload(req)
-			}
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("Context canceled: %v", ctx.Err()) // Log the context error
+			return ctx.Err()
+			//
+		default:
 		}
-	}()
-	return nil
+		req, err := stream.Recv() // Receive file data from client (for upload)
+		if err == io.EOF {
+			log.Println("File upload completed.")
+			// return nil // End of stream; close connection gracefully.
+		}
+		if err != nil {
+			log.Printf("Error receiving data from client: %v", err)
+			log.Println("The request data: ", req)
+			// return nil
+		}
+		if req.Content != nil { // Client is uploading a file
+			s.handleFileUpload(req)
+		}
+	}
 }
 
 // handleFileUpload: Save uploaded file chunks from the client.
@@ -115,7 +119,7 @@ func (s *server) pushFileUpdate(filePath string) {
 			TotalSize: int64(n),
 		}
 
-		// s.mu.Lock()
+		s.mu.Lock()
 		for _, clientStream := range s.clients {
 			err := clientStream.Send(fileData)
 			if err != nil {
@@ -123,7 +127,7 @@ func (s *server) pushFileUpdate(filePath string) {
 				continue
 			}
 		}
-		// s.mu.Unlock()
+		s.mu.Unlock()
 	}
 }
 
@@ -136,9 +140,6 @@ func main() {
 	srv := &server{
 		clients: make(map[string]pb.FileService_StreamFilesServer),
 	}
-
-	// path, _ := filepath.Abs(fmt.Sprintf("./%s", directory))
-	// go srv.watchFiles(path)
 
 	server := grpc.NewServer()
 	pb.RegisterFileServiceServer(server, srv)
