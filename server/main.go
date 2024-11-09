@@ -1,192 +1,160 @@
 package main
 
 import (
+	// "fmt"
 	"fmt"
+	"io"
 	"log"
-	"net/http"
-	"os"
-	"path/filepath"
-
-	// "strconv"
+	"net"
+	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
+	pb "watcher/filetransfer" // Replace with the actual path to the generated
+
+	"google.golang.org/grpc"
 )
 
-func main() {
-	syncServer()
-}
-
-var (
-	addr = ":8080"
-
-	// homeTempl = template.Must(template.New("").Parse(homeHTML))
-	filename string
-	upgrader = websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-	}
-)
-
-func syncServer() {
-	r := gin.Default()
-
-	// NOTE: the current watcher structer works by having a client port
-	// at the home that client then connects as a socket to /ws where
-	// it t hen takes in the read and rewrites
-	r.GET("/", serveWs)
-	r.POST("/upload", fileUpload)
-	r.GET("/emit/:id", fileEmit)
-
-	// client, context := connectMongo()
-	dirWatcher()
-
-	if err := r.Run(addr); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func serveWs(c *gin.Context) {
-	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		if _, ok := err.(websocket.HandshakeError); !ok {
-			log.Println(err)
-		}
-		return
-	}
-
-	// var lastMod time.Time
-	// if n, err := strconv.ParseInt(c.Query("lastMod"), 16, 64); err == nil {
-	// 	lastMod = time.Unix(0, n)
-	// }
-
-	// go writer(ws, lastMod)
-	// NOTE: the loop itself it handled by the function
-	//
-	// dirWatcher(ws)
-	reader(ws)
-}
-
-// TODO: rewrite the web server in gin
-// TODO: make the client be cli or something?
-// TODO: turn the file listen into a folder listen
 const (
-	// Time allowed to write the file to the client.
-	writeWait = 3 * time.Second
 	directory = "content"
-	// Time allowed to read the next pong message from the client.
-	pongWait = 60 * time.Second
-	// Send pings to client with this period. Must be less than pongWait.
-	pingPeriod = (pongWait * 9) / 10
-	// Poll file for changes with this period.
-	filePeriod = 2 * time.Second
-)
+	chunkSize = 64 * 1024
+) // Chunk size for streaming files.
 
-func readFileIfModified(lastMod time.Time) ([]byte, time.Time, error) {
-	fi, err := os.Stat(filename)
-	if err != nil {
-		return nil, lastMod, err
-	}
-	if !fi.ModTime().After(lastMod) {
-		return nil, lastMod, nil
-	}
-	p, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, fi.ModTime(), err
-	}
-	return p, fi.ModTime(), nil
+type server struct {
+	pb.UnimplementedFileServiceServer
+	clients map[string]*clientSession
+	mu      sync.RWMutex
 }
 
-func reader(ws *websocket.Conn) {
-	defer ws.Close()
-	ws.SetReadLimit(512)
-	ws.SetReadDeadline(time.Now().Add(pongWait))
-	ws.SetPongHandler(func(string) error { ws.SetReadDeadline(time.Now().Add(pongWait)); return nil })
-	for {
-		_, _, err := ws.ReadMessage()
-		if err != nil {
-			break
-		}
+type clientSession struct {
+	stream     pb.FileService_TransferFileServer
+	id         string
+	active     bool
+	lastOffset int64
+}
+
+func newServer() *server {
+	return &server{
+		clients: make(map[string]*clientSession),
 	}
 }
 
-func writer(ws *websocket.Conn, lastMod time.Time) {
-	lastError := ""
-	pingTicker := time.NewTicker(pingPeriod)
-	fileTicker := time.NewTicker(filePeriod)
-	defer func() {
-		pingTicker.Stop()
-		fileTicker.Stop()
-		ws.Close()
-	}()
+func (s *server) registerClient(clientID string, stream pb.FileService_TransferFileServer) *clientSession {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session := &clientSession{
+		id:     clientID,
+		active: true,
+		stream: stream,
+	}
+	s.clients[clientID] = session
+	log.Printf("Client registered: %s\n", clientID)
+	return session
+}
 
-	for {
-		select {
-		case <-fileTicker.C:
-			var p []byte
-			var err error
+func (s *server) unregisterClient(clientID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.clients, clientID)
+	log.Printf("Client unregistered: %s\n", clientID)
+}
 
-			p, lastMod, err = readFileIfModified(lastMod)
+func (s *server) TransferFile(stream pb.FileService_TransferFileServer) error {
+	clientID := generateClientID()
+	session := s.registerClient(clientID, stream)
+	defer s.unregisterClient(clientID)
 
-			if err != nil {
-				if s := err.Error(); s != lastError {
-					lastError = s
-					p = []byte(lastError)
+	// Create channels for coordination
+	errChan := make(chan error, 1)
+	done := make(chan bool)
+	defer close(done)
+
+	// Start receiving goroutine
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				fileData, err := stream.Recv()
+				if err == io.EOF {
+					errChan <- nil
+					return
 				}
-			} else {
-				lastError = ""
-			}
+				if err != nil {
+					errChan <- err
+					return
+				}
 
-			if p != nil {
-				ws.SetWriteDeadline(time.Now().Add(writeWait))
-				if err := ws.WriteMessage(websocket.TextMessage, p); err != nil {
+				s.mu.Lock()
+				if client, exists := s.clients[clientID]; exists {
+					client.lastOffset = fileData.Offset
+				}
+				s.mu.Unlock()
+
+				log.Printf("Client %s: Received file chunk: ID=%s, Location=%s, Content=%s, Offset=%d, Size=%d\n",
+					clientID, fileData.Id, fileData.Location, fileData.Content, fileData.Offset, fileData.TotalSize)
+
+				// Send acknowledgment
+				response := &pb.FileData{
+					Id:        fileData.Id,
+					Location:  fileData.Location,
+					Offset:    fileData.Offset,
+					TotalSize: fileData.TotalSize,
+				}
+
+				if err := session.stream.Send(response); err != nil {
+					errChan <- err
 					return
 				}
 			}
-		case <-pingTicker.C:
-			ws.SetWriteDeadline(time.Now().Add(writeWait))
+		}
+	}()
 
-			if err := ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				return
-			}
+	// Wait for error or completion
+	return <-errChan
+}
+
+func (s *server) GetActiveClients() []*clientSession {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	activeClients := make([]*clientSession, 0, len(s.clients))
+	for _, client := range s.clients {
+		if client.active {
+			activeClients = append(activeClients, client)
 		}
 	}
+	return activeClients
 }
 
-func fileUpload(c *gin.Context) {
-	file, err := c.FormFile("file")
+func main() {
+	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
-		c.String(http.StatusBadRequest, "Get form err: %s", err.Error())
-		return
+		log.Fatalf("failed to listen: %v", err)
 	}
-	filename := file.Filename
-	if err := c.SaveUploadedFile(file, filename); err != nil {
-		c.String(http.StatusInternalServerError, "Save file err: %s", err.Error())
-		return
+
+	s := grpc.NewServer()
+	fileServer := newServer()
+	pb.RegisterFileServiceServer(s, fileServer)
+
+	// Monitor active clients
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+			activeClients := fileServer.GetActiveClients()
+			log.Printf("Active clients: %d\n", len(activeClients))
+			for _, client := range activeClients {
+				log.Printf("Client ID: %s, Last Offset: %d\n", client.id, client.lastOffset)
+			}
+		}
+	}()
+
+	log.Println("Server started on :50051")
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
 	}
-	c.String(http.StatusOK, "File %s uploaded successfully.", filename)
 }
 
-// this function takes in the param of the file id and then returns it to the client
-func fileEmit(c *gin.Context) {
-	// TODO: make the id fetch from the db that then retrieves the location of the file and the name
-	filename := c.Param("id")
-	// Construct the full file path
-	filePath := filepath.Join(directory, filename)
-
-	// Check if file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
-		return
-	}
-
-	// Set header to force download
-	c.Header("Content-Description", "File Transfer")
-	c.Header("Content-Transfer-Encoding", "binary")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	c.Header("Content-Type", "application/octet-stream")
-
-	// Serve the file
-	c.File(filePath)
+func generateClientID() string {
+	return fmt.Sprintf("client_%d", time.Now().UnixNano())
 }
