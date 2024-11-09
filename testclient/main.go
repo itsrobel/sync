@@ -39,7 +39,6 @@ func main() {
 	// filePath := filepath.Join(directory, "f.md")
 	uploadFile(stream, filePath)
 	// log.Printf("Finished uploading file")
-	stream.CloseSend() // Close send side after upload is complete.
 
 	go func() { // Listen for incoming updates from server.
 		for {
@@ -51,17 +50,17 @@ func main() {
 				log.Fatalf("Error receiving data from server: %v", recvErr)
 			}
 
-			log.Printf("Received updated file: %s (%d bytes)", in.Filename, len(in.Data))
-			saveToFile(in.Filename, in.Data)
+			log.Printf("Received updated file: %s (%d bytes)", in.Location, len(in.Content))
+			saveToFile(in.Location, in.Content)
 		}
 	}()
 	select {} // Keep running indefinitely.
 }
 
 // Upload a local file using bidirectional streaming.
-func uploadFile(stream pb.FileService_StreamFilesClient, directory string) error {
-	log.Println(directory)
-	file, openErr := os.Open(directory)
+func uploadFile(stream pb.FileService_StreamFilesClient, filePath string) error {
+	log.Println(filePath)
+	file, openErr := os.Open(filePath)
 	if openErr != nil {
 		log.Fatalf("Failed to open local file: %v", openErr)
 		return openErr
@@ -76,8 +75,8 @@ func uploadFile(stream pb.FileService_StreamFilesClient, directory string) error
 
 		if n > 0 { // Only send if there's data to send
 			sendErr := stream.Send(&pb.FileData{
-				Filename: filepath.Base(directory), // Use actual filename here
-				Data:     buf[:n],                  // Send only n bytes
+				Location: filepath.Base(filePath), // Use actual filename here
+				Content:  buf[:n],                 // Send only n bytes
 				Offset:   int64(n),
 			})
 			if sendErr != nil {
@@ -85,6 +84,10 @@ func uploadFile(stream pb.FileService_StreamFilesClient, directory string) error
 				return sendErr
 			}
 			log.Printf("Sent %d bytes", n)
+		}
+		closeErr := stream.CloseSend()
+		if closeErr != nil {
+			log.Printf("Failed to close send stream: %v", closeErr)
 		}
 
 		if readErr == io.EOF {

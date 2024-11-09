@@ -19,14 +19,20 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	FileService_SendFile_FullMethodName = "/filetransfer.FileService/SendFile"
+	FileService_StreamFiles_FullMethodName       = "/filetransfer.FileService/StreamFiles"
+	FileService_StreamFileChanges_FullMethodName = "/filetransfer.FileService/StreamFileChanges"
+	FileService_DeleteFile_FullMethodName        = "/filetransfer.FileService/DeleteFile"
+	FileService_MoveFile_FullMethodName          = "/filetransfer.FileService/MoveFile"
 )
 
 // FileServiceClient is the client API for FileService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type FileServiceClient interface {
-	SendFile(ctx context.Context, in *FileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FileResponse], error)
+	StreamFiles(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[FileData, FileData], error)
+	StreamFileChanges(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[FileChange, FileChange], error)
+	DeleteFile(ctx context.Context, in *FileRequest, opts ...grpc.CallOption) (*ActionResponse, error)
+	MoveFile(ctx context.Context, in *MoveFileRequest, opts ...grpc.CallOption) (*ActionResponse, error)
 }
 
 type fileServiceClient struct {
@@ -37,30 +43,60 @@ func NewFileServiceClient(cc grpc.ClientConnInterface) FileServiceClient {
 	return &fileServiceClient{cc}
 }
 
-func (c *fileServiceClient) SendFile(ctx context.Context, in *FileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FileResponse], error) {
+func (c *fileServiceClient) StreamFiles(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[FileData, FileData], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &FileService_ServiceDesc.Streams[0], FileService_SendFile_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &FileService_ServiceDesc.Streams[0], FileService_StreamFiles_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[FileRequest, FileResponse]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
+	x := &grpc.GenericClientStream[FileData, FileData]{ClientStream: stream}
 	return x, nil
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type FileService_SendFileClient = grpc.ServerStreamingClient[FileResponse]
+type FileService_StreamFilesClient = grpc.BidiStreamingClient[FileData, FileData]
+
+func (c *fileServiceClient) StreamFileChanges(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[FileChange, FileChange], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &FileService_ServiceDesc.Streams[1], FileService_StreamFileChanges_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[FileChange, FileChange]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type FileService_StreamFileChangesClient = grpc.BidiStreamingClient[FileChange, FileChange]
+
+func (c *fileServiceClient) DeleteFile(ctx context.Context, in *FileRequest, opts ...grpc.CallOption) (*ActionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ActionResponse)
+	err := c.cc.Invoke(ctx, FileService_DeleteFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) MoveFile(ctx context.Context, in *MoveFileRequest, opts ...grpc.CallOption) (*ActionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ActionResponse)
+	err := c.cc.Invoke(ctx, FileService_MoveFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 
 // FileServiceServer is the server API for FileService service.
 // All implementations must embed UnimplementedFileServiceServer
 // for forward compatibility.
 type FileServiceServer interface {
-	SendFile(*FileRequest, grpc.ServerStreamingServer[FileResponse]) error
+	StreamFiles(grpc.BidiStreamingServer[FileData, FileData]) error
+	StreamFileChanges(grpc.BidiStreamingServer[FileChange, FileChange]) error
+	DeleteFile(context.Context, *FileRequest) (*ActionResponse, error)
+	MoveFile(context.Context, *MoveFileRequest) (*ActionResponse, error)
 	mustEmbedUnimplementedFileServiceServer()
 }
 
@@ -71,8 +107,17 @@ type FileServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedFileServiceServer struct{}
 
-func (UnimplementedFileServiceServer) SendFile(*FileRequest, grpc.ServerStreamingServer[FileResponse]) error {
-	return status.Errorf(codes.Unimplemented, "method SendFile not implemented")
+func (UnimplementedFileServiceServer) StreamFiles(grpc.BidiStreamingServer[FileData, FileData]) error {
+	return status.Errorf(codes.Unimplemented, "method StreamFiles not implemented")
+}
+func (UnimplementedFileServiceServer) StreamFileChanges(grpc.BidiStreamingServer[FileChange, FileChange]) error {
+	return status.Errorf(codes.Unimplemented, "method StreamFileChanges not implemented")
+}
+func (UnimplementedFileServiceServer) DeleteFile(context.Context, *FileRequest) (*ActionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteFile not implemented")
+}
+func (UnimplementedFileServiceServer) MoveFile(context.Context, *MoveFileRequest) (*ActionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MoveFile not implemented")
 }
 func (UnimplementedFileServiceServer) mustEmbedUnimplementedFileServiceServer() {}
 func (UnimplementedFileServiceServer) testEmbeddedByValue()                     {}
@@ -95,16 +140,55 @@ func RegisterFileServiceServer(s grpc.ServiceRegistrar, srv FileServiceServer) {
 	s.RegisterService(&FileService_ServiceDesc, srv)
 }
 
-func _FileService_SendFile_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(FileRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(FileServiceServer).SendFile(m, &grpc.GenericServerStream[FileRequest, FileResponse]{ServerStream: stream})
+func _FileService_StreamFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(FileServiceServer).StreamFiles(&grpc.GenericServerStream[FileData, FileData]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type FileService_SendFileServer = grpc.ServerStreamingServer[FileResponse]
+type FileService_StreamFilesServer = grpc.BidiStreamingServer[FileData, FileData]
+
+func _FileService_StreamFileChanges_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(FileServiceServer).StreamFileChanges(&grpc.GenericServerStream[FileChange, FileChange]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type FileService_StreamFileChangesServer = grpc.BidiStreamingServer[FileChange, FileChange]
+
+func _FileService_DeleteFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).DeleteFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_DeleteFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).DeleteFile(ctx, req.(*FileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_MoveFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MoveFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).MoveFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_MoveFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).MoveFile(ctx, req.(*MoveFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
 
 // FileService_ServiceDesc is the grpc.ServiceDesc for FileService service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -112,12 +196,28 @@ type FileService_SendFileServer = grpc.ServerStreamingServer[FileResponse]
 var FileService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "filetransfer.FileService",
 	HandlerType: (*FileServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "DeleteFile",
+			Handler:    _FileService_DeleteFile_Handler,
+		},
+		{
+			MethodName: "MoveFile",
+			Handler:    _FileService_MoveFile_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "SendFile",
-			Handler:       _FileService_SendFile_Handler,
+			StreamName:    "StreamFiles",
+			Handler:       _FileService_StreamFiles_Handler,
 			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "StreamFileChanges",
+			Handler:       _FileService_StreamFileChanges_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "filetransfer.proto",

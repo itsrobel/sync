@@ -136,7 +136,12 @@ If the file status is deleted for more than 30 days or some shit I can remove th
 - [x] attach the directory watch to the client
 - [ ] move the project into using gRPC since it fixes most of my problems
 
-- [ ] create a socket message that downloads the file from client to server and vise versa
+  - right now I have bi directional streaming of files but the files append and do "sync"
+  - I need to change how the files are opened.
+  - I also now have to re implement the database.
+  - I do not need web sockets since the bi directional streaming can handle the changes
+
+- [x] create a socket message that downloads the file from client to server and vise versa
 - [ ] figure out how to do file difs
 - [x] attach go to database
   - [ ]create the data structures for database and how to query them

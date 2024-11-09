@@ -2,12 +2,49 @@ syntax = "proto3";
 package filetransfer;
 
 option go_package = "../filetransfer";
+
 service FileService {
-  rpc SendFile(FileRequest) returns (stream FileResponse);
+  rpc StreamFiles(stream FileData) returns (stream FileData); // Bidirectional streaming for file uploads and downloads
+  rpc StreamFileChanges(stream FileChange) returns (stream FileChange); // Bidirectional streaming for file changes
+  rpc DeleteFile(FileRequest) returns (ActionResponse);
+  rpc MoveFile(MoveFileRequest) returns (ActionResponse);
 }
+// look up in mongo db if the file exists
+// the file change should be the first it of information that is sent
+// if the file does not exist yeah, then send the entire file
+//TODO: I need to get file differences
+//TODO: add the directory watching to the grpc
+message FileData { 
+  string id = 1;         // Persistent unique identifier for the file
+  bytes content = 2;        // File content (for upload/download)
+  string location = 3;   // location of the file
+  int64 offset = 4;      // Offset for streaming
+  int64 total_size = 5;  // Total size of the file
+}
+
+
+message FileChange {
+  string content = 1;    // File content
+  string location = 2;   // Path to the file
+  string file_id = 3;     // Unique identifier for the file
+  string change_id = 4;  // Unique identifier for the change
+  int64 offset = 5;      // Offset for streaming
+  int64 total_size = 6;  // Total size of the file change
+  int64 timestamp = 7;   // Timestamp for the change
+}
+
+
 message FileRequest {
-  string filename = 1;
+  string id = 1;         // Persistent unique identifier for the file
+  string path = 2;       // Path to the file (used for delete or download)
 }
-message FileResponse {
-  bytes data = 1;
+
+message MoveFileRequest {
+  string id = 1;         // Persistent unique identifier for the file
+  string destination = 2; // New path after move/rename
+}
+
+message ActionResponse {
+  bool success = 1;
+  string message = 2;
 }
