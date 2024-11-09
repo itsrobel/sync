@@ -33,14 +33,16 @@ func main() {
 		log.Fatalf("Failed to start stream: %v", err)
 	}
 
-	path, _ := filepath.Abs(fmt.Sprintf("./%s", directory))
-	filePath := filepath.Join(path, "t.md")
-
-	// filePath := filepath.Join(directory, "f.md")
-	uploadFile(stream, filePath)
+	// path, _ := filepath.Abs(fmt.Sprintf("./%s", directory))
+	// filePath := filepath.Join(path, "t.md")
+	// uploadFile(stream, filePath)
 	// log.Printf("Finished uploading file")
 
+	path, _ := filepath.Abs(fmt.Sprintf("./%s", directory))
+	watchFiles(path)
+
 	go func() { // Listen for incoming updates from server.
+		log.Println("Connected to server")
 		for {
 			in, recvErr := stream.Recv()
 			if recvErr == io.EOF {
