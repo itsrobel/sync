@@ -11,7 +11,6 @@ import (
 
 	pb "watcher/filetransfer" // Replace with the actual path to the generated
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 )
@@ -42,17 +41,20 @@ func (s *server) StreamFiles(stream pb.FileService_StreamFilesServer) error {
 		s.mu.Unlock()
 	}()
 
+	// var filename string
+
 	go func() {
 		for {
 			req, err := stream.Recv() // Receive file data from client (for upload)
 			if err == io.EOF {
-				return
+				log.Println("File upload completed.")
+				return // End of stream; close connection gracefully.
 			}
 			if err != nil {
 				log.Printf("Error receiving data from client: %v", err)
 				return
 			}
-			if req.Data != nil { // Client is uploading a file
+			if req.Content != nil { // Client is uploading a file
 				s.handleFileUpload(req)
 			}
 		}
@@ -63,17 +65,17 @@ func (s *server) StreamFiles(stream pb.FileService_StreamFilesServer) error {
 // handleFileUpload: Save uploaded file chunks from the client.
 func (s *server) handleFileUpload(fileData *pb.FileData) error {
 	// filepath := "/path/to/upload/" + fileData.Filename
-	filePath := filepath.Join(directory, fileData.Filename)
-	print(fileData.Filename)
+	filePath := filepath.Join(directory, fileData.Location)
+	// print(fileData.Filename)
 
-	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		log.Printf("Failed to open local file %s: %v", filePath, err)
 		return err
 	}
 	defer file.Close()
 
-	_, err = file.Write(fileData.Data)
+	_, err = file.Write(fileData.Content)
 	if err != nil {
 		log.Printf("Failed writing data to local file %s: %v", filePath, err)
 		return err
@@ -81,45 +83,6 @@ func (s *server) handleFileUpload(fileData *pb.FileData) error {
 
 	log.Printf("Successfully saved data to %s", filePath)
 	return nil
-}
-
-// Watch files and notify all connected clients when a file changes.
-func (s *server) watchFiles(path string) error {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return err
-	}
-	defer watcher.Close()
-
-	err = watcher.Add(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("Watching directory: %s\n", path)
-
-	if err != nil {
-		return err
-	}
-
-	for {
-		select {
-		case event, ok := <-watcher.Events:
-			if !ok {
-				return nil
-			}
-
-			if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
-				log.Println("Modified or created file:", event.Name)
-				s.pushFileUpdate(event.Name)
-			}
-
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				return nil
-			}
-			log.Println("Error:", err)
-		}
-	}
 }
 
 // Push updated file content to all connected clients.
@@ -142,10 +105,9 @@ func (s *server) pushFileUpdate(filePath string) {
 			log.Printf("Failed reading file: %v", readErr)
 			return
 		}
-
 		fileData := &pb.FileData{
-			Filename:  filepath.Base(filePath),
-			Data:      buffer[:n],
+			Location:  filepath.Base(filePath),
+			Content:   buffer[:n],
 			Offset:    int64(n),
 			TotalSize: int64(n),
 		}
@@ -175,11 +137,11 @@ func main() {
 	path, _ := filepath.Abs(fmt.Sprintf("./%s", directory))
 	go srv.watchFiles(path)
 
-	s := grpc.NewServer()
-	pb.RegisterFileServiceServer(s, srv)
+	server := grpc.NewServer()
+	pb.RegisterFileServiceServer(server, srv)
 
 	log.Println("gRPC server listening on :50051")
-	if err := s.Serve(lis); err != nil {
+	if err := server.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}
 }
