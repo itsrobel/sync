@@ -2,16 +2,15 @@ package main
 
 import (
 	// "fmt"
+	"fmt"
 	"io"
 	"log"
 	"net"
-	"os"
-	"path/filepath"
 	"sync"
+	"time"
 
 	pb "watcher/filetransfer" // Replace with the actual path to the generated
 
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 )
 
@@ -22,130 +21,140 @@ const (
 
 type server struct {
 	pb.UnimplementedFileServiceServer
-	clients map[string]pb.FileService_StreamFilesServer // Track connected clients
-	mu      sync.Mutex                                  // Protect access to clients map
+	mu      sync.RWMutex
+	clients map[string]*clientSession
 }
 
-// StreamFiles: Bidirectional streaming that handles both uploads and downloads.
-func (s *server) StreamFiles(stream pb.FileService_StreamFilesServer) error {
-	clientID := uuid.NewString() // Generate a unique ID for each client connection
-	log.Println("clientID: ", clientID)
-	ctx := stream.Context()
+type clientSession struct {
+	id         string
+	active     bool
+	lastOffset int64
+	stream     pb.FileService_TransferFileServer
+}
 
+func newServer() *server {
+	return &server{
+		clients: make(map[string]*clientSession),
+	}
+}
+
+func (s *server) registerClient(clientID string, stream pb.FileService_TransferFileServer) *clientSession {
 	s.mu.Lock()
-	s.clients[clientID] = stream // Register client stream
-	s.mu.Unlock()
-
-	defer func() {
-		s.mu.Lock()
-		delete(s.clients, clientID) // Remove client when done
-		s.mu.Unlock()
-	}()
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("Context canceled: %v", ctx.Err()) // Log the context error
-			return ctx.Err()
-			//
-		default:
-		}
-		req, err := stream.Recv() // Receive file data from client (for upload)
-		if err == io.EOF {
-			log.Println("File upload completed.")
-			// return nil // End of stream; close connection gracefully.
-		}
-		if err != nil {
-			log.Printf("Error receiving data from client: %v", err)
-			log.Println("The request data: ", req)
-			// return nil
-		}
-		if req.Content != nil { // Client is uploading a file
-			s.handleFileUpload(req)
-		}
+	defer s.mu.Unlock()
+	session := &clientSession{
+		id:     clientID,
+		active: true,
+		stream: stream,
 	}
+	s.clients[clientID] = session
+	log.Printf("Client registered: %s\n", clientID)
+	return session
 }
 
-// handleFileUpload: Save uploaded file chunks from the client.
-func (s *server) handleFileUpload(fileData *pb.FileData) error {
-	// filepath := "/path/to/upload/" + fileData.Filename
-	filePath := filepath.Join(directory, fileData.Location)
-	// print(fileData.Filename)
-	log.Println(filePath)
-	log.Println("Now I have to check if the file exists in the client")
-	log.Println("I can do this by taking a look at the file Data and checking the Id")
-
-	// file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	// if err != nil {
-	// 	log.Printf("Failed to open local file %s: %v", filePath, err)
-	// 	return err
-	// }
-	// defer file.Close()
-	//
-	// _, err = file.Write(fileData.Content)
-	// if err != nil {
-	// 	log.Printf("Failed writing data to local file %s: %v", filePath, err)
-	// 	return err
-	// }
-	//
-	// log.Printf("Successfully saved data to %s", filePath)
-	return nil
+func (s *server) unregisterClient(clientID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.clients, clientID)
+	log.Printf("Client unregistered: %s\n", clientID)
 }
 
-// Push updated file content to all connected clients.
-func (s *server) pushFileUpdate(filePath string) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		log.Printf("Failed to open file %s: %v", filePath, err)
-		return
-	}
-	defer file.Close()
+func (s *server) TransferFile(stream pb.FileService_TransferFileServer) error {
+	clientID := generateClientID()
+	session := s.registerClient(clientID, stream)
+	defer s.unregisterClient(clientID)
 
-	buffer := make([]byte, chunkSize)
+	// Create channels for coordination
+	errChan := make(chan error, 1)
+	done := make(chan bool)
+	defer close(done)
 
-	for {
-		n, readErr := file.Read(buffer)
-		if readErr == io.EOF && n == 0 {
-			break
-		}
-		if readErr != nil && readErr != io.EOF {
-			log.Printf("Failed reading file: %v", readErr)
-			return
-		}
-		fileData := &pb.FileData{
-			Location:  filepath.Base(filePath),
-			Content:   buffer[:n],
-			Offset:    int64(n),
-			TotalSize: int64(n),
-		}
+	// Start receiving goroutine
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				fileData, err := stream.Recv()
+				if err == io.EOF {
+					errChan <- nil
+					return
+				}
+				if err != nil {
+					errChan <- err
+					return
+				}
 
-		s.mu.Lock()
-		for _, clientStream := range s.clients {
-			err := clientStream.Send(fileData)
-			if err != nil {
-				log.Printf("Failed sending update to client: %v", err)
-				continue
+				s.mu.Lock()
+				if client, exists := s.clients[clientID]; exists {
+					client.lastOffset = fileData.Offset
+				}
+				s.mu.Unlock()
+
+				log.Printf("Client %s: Received file chunk: ID=%s, Location=%s, Offset=%d, Size=%d\n",
+					clientID, fileData.Id, fileData.Location, fileData.Offset, fileData.TotalSize)
+
+				// Send acknowledgment
+				response := &pb.FileData{
+					Id:        fileData.Id,
+					Location:  fileData.Location,
+					Offset:    fileData.Offset,
+					TotalSize: fileData.TotalSize,
+				}
+
+				if err := session.stream.Send(response); err != nil {
+					errChan <- err
+					return
+				}
 			}
 		}
-		s.mu.Unlock()
+	}()
+
+	// Wait for error or completion
+	return <-errChan
+}
+
+func (s *server) GetActiveClients() []*clientSession {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	activeClients := make([]*clientSession, 0, len(s.clients))
+	for _, client := range s.clients {
+		if client.active {
+			activeClients = append(activeClients, client)
+		}
 	}
+	return activeClients
 }
 
 func main() {
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
+		log.Fatalf("failed to listen: %v", err)
 	}
 
-	srv := &server{
-		clients: make(map[string]pb.FileService_StreamFilesServer),
-	}
+	s := grpc.NewServer()
+	fileServer := newServer()
+	pb.RegisterFileServiceServer(s, fileServer)
 
-	server := grpc.NewServer()
-	pb.RegisterFileServiceServer(server, srv)
+	// Monitor active clients
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+			activeClients := fileServer.GetActiveClients()
+			log.Printf("Active clients: %d\n", len(activeClients))
+			for _, client := range activeClients {
+				log.Printf("Client ID: %s, Last Offset: %d\n", client.id, client.lastOffset)
+			}
+		}
+	}()
 
-	log.Println("gRPC server listening on :50051")
-	if err := server.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+	log.Println("Server started on :50051")
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
 	}
+}
+
+func generateClientID() string {
+	return fmt.Sprintf("client_%d", time.Now().UnixNano())
 }

@@ -23,6 +23,7 @@ const (
 	FileService_StreamFileChanges_FullMethodName = "/filetransfer.FileService/StreamFileChanges"
 	FileService_DeleteFile_FullMethodName        = "/filetransfer.FileService/DeleteFile"
 	FileService_MoveFile_FullMethodName          = "/filetransfer.FileService/MoveFile"
+	FileService_TransferFile_FullMethodName      = "/filetransfer.FileService/TransferFile"
 )
 
 // FileServiceClient is the client API for FileService service.
@@ -33,6 +34,7 @@ type FileServiceClient interface {
 	StreamFileChanges(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[FileChange, FileChange], error)
 	DeleteFile(ctx context.Context, in *FileRequest, opts ...grpc.CallOption) (*ActionResponse, error)
 	MoveFile(ctx context.Context, in *MoveFileRequest, opts ...grpc.CallOption) (*ActionResponse, error)
+	TransferFile(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[FileData, FileData], error)
 }
 
 type fileServiceClient struct {
@@ -89,6 +91,19 @@ func (c *fileServiceClient) MoveFile(ctx context.Context, in *MoveFileRequest, o
 	return out, nil
 }
 
+func (c *fileServiceClient) TransferFile(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[FileData, FileData], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &FileService_ServiceDesc.Streams[2], FileService_TransferFile_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[FileData, FileData]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type FileService_TransferFileClient = grpc.BidiStreamingClient[FileData, FileData]
+
 // FileServiceServer is the server API for FileService service.
 // All implementations must embed UnimplementedFileServiceServer
 // for forward compatibility.
@@ -97,6 +112,7 @@ type FileServiceServer interface {
 	StreamFileChanges(grpc.BidiStreamingServer[FileChange, FileChange]) error
 	DeleteFile(context.Context, *FileRequest) (*ActionResponse, error)
 	MoveFile(context.Context, *MoveFileRequest) (*ActionResponse, error)
+	TransferFile(grpc.BidiStreamingServer[FileData, FileData]) error
 	mustEmbedUnimplementedFileServiceServer()
 }
 
@@ -118,6 +134,9 @@ func (UnimplementedFileServiceServer) DeleteFile(context.Context, *FileRequest) 
 }
 func (UnimplementedFileServiceServer) MoveFile(context.Context, *MoveFileRequest) (*ActionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MoveFile not implemented")
+}
+func (UnimplementedFileServiceServer) TransferFile(grpc.BidiStreamingServer[FileData, FileData]) error {
+	return status.Errorf(codes.Unimplemented, "method TransferFile not implemented")
 }
 func (UnimplementedFileServiceServer) mustEmbedUnimplementedFileServiceServer() {}
 func (UnimplementedFileServiceServer) testEmbeddedByValue()                     {}
@@ -190,6 +209,13 @@ func _FileService_MoveFile_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FileService_TransferFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(FileServiceServer).TransferFile(&grpc.GenericServerStream[FileData, FileData]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type FileService_TransferFileServer = grpc.BidiStreamingServer[FileData, FileData]
+
 // FileService_ServiceDesc is the grpc.ServiceDesc for FileService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -216,6 +242,12 @@ var FileService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamFileChanges",
 			Handler:       _FileService_StreamFileChanges_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "TransferFile",
+			Handler:       _FileService_TransferFile_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
