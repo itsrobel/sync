@@ -21,15 +21,15 @@ const (
 
 type server struct {
 	pb.UnimplementedFileServiceServer
-	mu      sync.RWMutex
 	clients map[string]*clientSession
+	mu      sync.RWMutex
 }
 
 type clientSession struct {
+	stream     pb.FileService_TransferFileServer
 	id         string
 	active     bool
 	lastOffset int64
-	stream     pb.FileService_TransferFileServer
 }
 
 func newServer() *server {
@@ -91,8 +91,8 @@ func (s *server) TransferFile(stream pb.FileService_TransferFileServer) error {
 				}
 				s.mu.Unlock()
 
-				log.Printf("Client %s: Received file chunk: ID=%s, Location=%s, Offset=%d, Size=%d\n",
-					clientID, fileData.Id, fileData.Location, fileData.Offset, fileData.TotalSize)
+				log.Printf("Client %s: Received file chunk: ID=%s, Location=%s, Content=%s, Offset=%d, Size=%d\n",
+					clientID, fileData.Id, fileData.Location, fileData.Content, fileData.Offset, fileData.TotalSize)
 
 				// Send acknowledgment
 				response := &pb.FileData{
