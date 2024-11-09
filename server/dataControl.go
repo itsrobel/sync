@@ -15,18 +15,29 @@ import (
 // NOTE: ID's are created by default
 // time?
 type File struct {
-	location string `bson:"location"`
-	contents string
-	active   bool // this can decide whether or not to sync
+	Location string `bson:"location"`
+	Contents string `bson:"contents"`
+	Active   bool   `bson:"active"` // this can decide whether or not to sync
+}
+
+// Every Hour if changes have been made create a new Version
+// Shouldn't the file just point to the latest version?
+type FileVersion struct {
+	Timestamp time.Time `bson:"time_stamp"` // Time when this version was created
+	Location  string    `bson:"location"`   // File location
+	Contents  string    `bson:"contents"`   // Full contents of the file at this version
+	VersionID int64     `bson:"version_id"` // Unique ID for the file
+	FileID    int64     `bson:"file_id"`    // Unique ID for the file
 }
 
 // TODO: when a file is change it can write a change log and then
 // write to the file to update
 type FileChange struct {
-	contentChange string
-	location      string // This is the current location of the file when the change happens
-	fileId        int64  // This is the id file of the file we are writing to
-	active        bool
+	Timestamp     time.Time `bson:"time_stamp"`     // Time when this version was created
+	ContentChange string    `bson:"content_change"` // Full contents of the file at this version
+	Location      string    `bson:"location"`       // File location
+	VersionID     int64     `bson:"version_id"`     // Unique ID for the file
+	ChangeID      int64     `bson:"change_id"`      // Unique ID for the file
 }
 
 func ensureIndexes(collection *mongo.Collection) error {
@@ -73,7 +84,7 @@ func connectMongo() (*mongo.Client, context.Context) {
 // TODO: turn this function into one that accepts a connection as a param
 // TODO: I need to restrict file types
 func createFile(collection *mongo.Collection, location string) {
-	file := File{location: location, active: true, contents: ""}
+	file := File{Location: location, Active: true, Contents: ""}
 	err := ensureIndexes(collection)
 	result, err := collection.InsertOne(context.Background(), file)
 	if err != nil {

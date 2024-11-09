@@ -3,22 +3,29 @@ package main
 import (
 	"fmt"
 	"log"
-	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/gorilla/websocket"
 )
 
-// the watcher should be a web server that handle client requests to then update the client version of the file
-func dirWatcher(ws *websocket.Conn) {
-	// Create a new watcher
+// Watch files and notify all connected clients when a file changes.
+func watchFiles(path string) {
+	client, _ := connectMongo()
 	watcher, err := fsnotify.NewWatcher()
+	collection := client.Database("sync").Collection("server")
+	documents, _ := getAllDocuments(collection)
+
 	if err != nil {
-		log.Fatal(err)
+		return
 	}
+
+	// deletedCount, _ := deleteAllDocuments(collection)
+	// fmt.Printf("Deleted %d documents\n", deletedCount)
+	for _, doc := range documents {
+		fmt.Println("documents:", doc)
+	}
+
 	defer watcher.Close()
 
-	// Start listening for events
 	go func() {
 		for {
 			select {
@@ -26,32 +33,29 @@ func dirWatcher(ws *websocket.Conn) {
 				if !ok {
 					return
 				}
-				log.Println("event:", event)
 
-				if err := ws.WriteMessage(websocket.TextMessage, []byte(event.Name)); err != nil {
-					return
+				if (event.Op == fsnotify.Create) && validFileExtension(event.Name) {
+					log.Println("valid event location:", event)
+					createFile(collection, event.Name)
 				}
-				// NOTE: this is only checking for write events in teh file system
+
 				if event.Op&fsnotify.Write == fsnotify.Write {
-					log.Println("modified file:", event.Name)
+					log.Println("Modified or created file:", event.Name)
 				}
+
 			case err, ok := <-watcher.Errors:
 				if !ok {
 					return
 				}
-				log.Println("error:", err)
-
+				log.Println("Error:", err)
 			}
 		}
 	}()
 
-	// Add a path to watch
-	path, _ := filepath.Abs("./content")
 	err = watcher.Add(path)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("Watching directory: %s\n", path)
-	// Block main goroutine forever
 	<-make(chan struct{})
 }
