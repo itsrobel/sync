@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	// "fmt"
 	"io"
 	"log"
 	"net"
@@ -41,7 +41,7 @@ func (s *server) StreamFiles(stream pb.FileService_StreamFilesServer) error {
 		s.mu.Unlock()
 	}()
 
-	// var filename string
+	// var  filename string
 
 	go func() {
 		for {
@@ -67,21 +67,24 @@ func (s *server) handleFileUpload(fileData *pb.FileData) error {
 	// filepath := "/path/to/upload/" + fileData.Filename
 	filePath := filepath.Join(directory, fileData.Location)
 	// print(fileData.Filename)
+	log.Println(filePath)
+	log.Println("Now I have to check if the file exists in the client")
+	log.Println("I can do this by taking a look at the file Data and checking the Id")
 
-	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Printf("Failed to open local file %s: %v", filePath, err)
-		return err
-	}
-	defer file.Close()
-
-	_, err = file.Write(fileData.Content)
-	if err != nil {
-		log.Printf("Failed writing data to local file %s: %v", filePath, err)
-		return err
-	}
-
-	log.Printf("Successfully saved data to %s", filePath)
+	// file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	// if err != nil {
+	// 	log.Printf("Failed to open local file %s: %v", filePath, err)
+	// 	return err
+	// }
+	// defer file.Close()
+	//
+	// _, err = file.Write(fileData.Content)
+	// if err != nil {
+	// 	log.Printf("Failed writing data to local file %s: %v", filePath, err)
+	// 	return err
+	// }
+	//
+	// log.Printf("Successfully saved data to %s", filePath)
 	return nil
 }
 
@@ -134,8 +137,8 @@ func main() {
 		clients: make(map[string]pb.FileService_StreamFilesServer),
 	}
 
-	path, _ := filepath.Abs(fmt.Sprintf("./%s", directory))
-	go srv.watchFiles(path)
+	// path, _ := filepath.Abs(fmt.Sprintf("./%s", directory))
+	// go srv.watchFiles(path)
 
 	server := grpc.NewServer()
 	pb.RegisterFileServiceServer(server, srv)
