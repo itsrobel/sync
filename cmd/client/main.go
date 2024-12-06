@@ -7,7 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	pb "watcher/filetransfer"
+
+	pb "github.com/itsrobel/sync/filetransfer" // Replace with the actual path to the generated
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	pb "watcher/filetransfer" // Replace with the actual path to the generated
+	pb "github.com/itsrobel/sync/filetransfer" // Replace with the actual path to the generated
 
 	"google.golang.org/grpc"
 )

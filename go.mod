@@ -1,4 +1,4 @@
-module watcher
+module sync
 
 go 1.23.1
 
