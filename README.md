@@ -1,15 +1,11 @@
-# Sync
-
 ---
-
 title: sync
 author: [Robel A.E. Schwarz]
 sources:
-[
-https://medium.com/@abhishekranjandev/building-a-production-grade-websocket-for-notifications-with-golang-and-gin-a-detailed-guide-5b676dcfbd5a,
-https://pkg.go.dev/github.com/gorilla/websocket,
-]
-
+  [
+    https://medium.com/@abhishekranjandev/building-a-production-grade-websocket-for-notifications-with-golang-and-gin-a-detailed-guide-5b676dcfbd5a,
+    https://pkg.go.dev/github.com/gorilla/websocket,
+  ]
 ---
 
 ## Introduction
