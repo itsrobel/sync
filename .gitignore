@@ -1,2 +1,3 @@
 ./sync.db
 bin/
+internal/services/
