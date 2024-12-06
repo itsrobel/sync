@@ -10,15 +10,10 @@ import (
 	"time"
 
 	pb "github.com/itsrobel/sync/filetransfer" // Replace with the actual path to the generated
-	// Replace with the actual path to the generated
+	// ct "github.com/itsrobel/sync/internal/types" // Replace with the actual path to the generated
 
 	"google.golang.org/grpc"
 )
-
-// const (
-// 	directory = "content"
-// 	chunkSize = 64 * 1024
-// ) // Chunk size for streaming files.
 
 type server struct {
 	pb.UnimplementedFileServiceServer

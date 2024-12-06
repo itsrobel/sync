@@ -164,9 +164,9 @@ the contents and the ID from the sql table
   - [ ]create the data structures for database and how to query them
   - [ ] make a on start call that populates database with the un-tracked files
 
-- [ ] dockerize
-- [ ] make buf.yamls
-- [ ] maybe use connectrpc
+- [x] dockerize
+- [x] make buf.yamls
+- [x] maybe use connectrpc
 
 ## Risks and Challenges
 
