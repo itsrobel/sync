@@ -1,4 +1,4 @@
-package watcher
+package main
 
 import (
 	"fmt"
@@ -11,10 +11,10 @@ import (
 //
 // if the client cant connect to the server, it should watch the files in the directory and send the files to the server when the server is back online
 func watchFiles(path string) {
-	client, _ := datacontroller.connectMongo()
+	client, _ := connectMongo()
 	watcher, err := fsnotify.NewWatcher()
 	collection := client.Database("sync").Collection("server")
-	documents, _ := datacontroller.getAllDocuments(collection)
+	documents, _ := getAllDocuments(collection)
 
 	if err != nil {
 		return
@@ -36,11 +36,11 @@ func watchFiles(path string) {
 					return
 				}
 
-				if (event.Op == fsnotify.Create) && datacontroller.validFileExtension(event.Name) {
+				if (event.Op == fsnotify.Create) && validFileExtension(event.Name) {
 					log.Println("valid event location:", event)
-					fileID := datacontroller.createFile(collection, event.Name)
+					fileID := createFile(collection, event.Name)
 
-					datacontroller.createFileVersion(collection, fileID)
+					createFileVersion(collection, fileID)
 
 				}
 

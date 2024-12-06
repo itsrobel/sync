@@ -1,4 +1,4 @@
-package datacontroller
+package main
 
 import (
 	"context"
