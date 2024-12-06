@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -27,10 +26,13 @@ func runClient(id int, wg *sync.WaitGroup) {
 		return
 	}
 	defer conn.Close()
-	client := pb.NewFileServiceClient(conn)
-	stream, err := client.TransferFile(context.Background())
-	filePath := filepath.Join(directory, "t.md")
-	uploadFile(stream, filePath)
+	// client := pb.NewFileServiceClient(conn)
+	// stream, err := client.TransferFile(context.Background())
+	watchFiles(directory)
+
+	// filePath := filepath.Join(directory, "t.md")
+	//
+	// uploadFile(stream, filePath)
 }
 
 func main() {
