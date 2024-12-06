@@ -2,39 +2,41 @@
 title: sync
 author: [Robel A.E. Schwarz]
 sources:
-  [
-    https://medium.com/@abhishekranjandev/building-a-production-grade-websocket-for-notifications-with-golang-and-gin-a-detailed-guide-5b676dcfbd5a,
-    https://pkg.go.dev/github.com/gorilla/websocket,
-  ]
+[
+https://medium.com/@abhishekranjandev/building-a-production-grade-websocket-for-notifications-with-golang-and-gin-a-detailed-guide-5b676dcfbd5a,
+https://pkg.go.dev/github.com/gorilla/websocket,
+]
 ---
 
-# Introduction
+## Introduction
 
 This is less of a Readme and more a design document for the development of this project
 
-# Issue Identification
+## Issue Identification
 
 I need a way to sync my notes to replace obsidian sync (go)
 
-# Goals
+## Goals
 
 I want to create an application that can be hosted on a web server as a socket server.
 I would like to connect to it using my own client-selected folder(s).
 
-The main goal for the website is to host my notes on the cloud and be able to easily download them at any time,
+The main goal for the website is to host my notes on the cloud and be able to
+easily download them at any time,
 as well as share them using a private link system.
 
-# Constraints
+## Constraints
 
 Since the web site is already being built out with gin I have to work around it
 
-# Solution Approach
+## Solution Approach
 
-The go-watcher server will need to be assigned a folder named Alpha that it can monitor.
-While the folder is being monitored, it will keep a continuous log of any changes made to
-each item within the folder. When other clients connect to the go-watcher server that is
-monitoring the folder Alpha, they will download the folder and then continue to monitor it
-or add to the server for any future changes.
+The go-watcher server will need to be assigned a folder named Alpha that
+it can monitor. While the folder is being monitored, it will keep a
+continuous log of any changes made to each item within the folder. When
+other clients connect to the go-watcher server that is monitoring the folder
+Alpha, they will download the folder and then continue to monitor it or add to
+the server for any future changes.
 
 ## A general list of requirements
 
@@ -46,53 +48,64 @@ or add to the server for any future changes.
 
 - The Server can download the folder from the client and create a "Master" copy of
 - New clients that connect to the server can select which folders to then sync to
-- New clients download the folder and their changes are uploaded to the server as well
+- New clients download the folder and their changes are uploaded to the server
+  as well
 
 ## Proposed Solutions
 
 Each of these will be Solutions on how to handle the file
 differences when syncing.
 
-1. Solution 1:
-   When a file is changed for the server, re-download that file
-   for each of the clients
+### Solution 1
 
-   - Pros:
-     is properly implemented in the easiest way
-   - Cons:
-     at scale will suck balls and requires a lot of network usage for each iteration
+When a file is changed for the server, re-download that file
+for each of the clients
 
-Even with the file transfer system, I need to atleast keep track of the movement of the files/
-what their names are so I do not re download the entire file system each time a file change is made
+- Pros:
+  is properly implemented in the easiest way
+- Cons:
+  at scale will suck balls and requires a lot of network usage for each iteration
 
-2. Solution 2:
-   When a file is changed for the server, for each client send out the difference
+Even with the file transfer system, I need to at least keep track of the
+movement of the files/ what their names are so I do not re download the entire
+file system each time a file change is made
 
-   - Pros
-     is probably the best and maybe the most "fun" to implement
-   - Cons
-     requirements are much higher
+### Solution 2
 
-   What would I need for this solution?
+When a file is changed for the server, for each client send out the difference
 
-   I need a way for each of the clients to have a master state of machine
-   or each of the files and their current "version"?
+- Pros
+  is probably the best and maybe the most "fun" to implement
+- Cons
+  requirements are much higher
 
-   How do I file version?
+What would I need for this solution?
 
-# Implementation Plan
+I need a way for each of the clients to have a master state of machine
+or each of the files and their current "version"?
 
-The first thing that Is required effectively for both solutions is file versioning and send out what changes where made and to which files they were made to.
+How do I file version?
 
-- There can be two ways to version a directory versioning and a individual file versioning.
+## Implementation Plan
 
-  - the directory versioning would update very 6hrs -> 12hrs and would be a master snap shot of all the file versions
+The first thing that Is required effectively for both solutions is file
+versioning and send out what changes where made and to which files they were
+made to.
+
+- There can be two ways to version a directory versioning and a individual file
+  versioning.
+
+  - the directory versioning would update very 6hrs -> 12hrs and would be a
+    master snap shot of all the file versions
     uploaded to the server
-    - the directory versioning would also be able to handle file movement/renaming/and deletion
-    - this would handle the problem of what happens when a client has not connected to the server for a few days
-      the client would iterate through the changes made in the ledger of the client and server to point to the
-      file changes.
-    - each of the file versions would have to have a timestamp ID and what changes were made to the file
+    - the directory versioning would also be able to handle file
+      movement/renaming/and deletion
+    - this would handle the problem of what happens when a client
+      has not connected to the server for a few days
+      the client would iterate through the changes made in the ledger of the
+      client and server to point to the file changes.
+    - each of the file versions would have to have a timestamp ID and what
+      changes were made to the file
 
 ## Data Structures
 
@@ -129,19 +142,22 @@ The ID system can be used for conflict resolution
 }
 ```
 
-If the file status is deleted for more than 30 days or some shit I can remove the contents and the ID from the sql table
+If the file status is deleted for more than 30 days or some shit I can remove
+the contents and the ID from the sql table
 
 ## Todo Items
 
 - [x] attach the directory watch to the client
 - [x] move the project into using gRPC since it fixes most of my problems
 
-  - right now I have bi directional streaming of files but the files append and do "sync"
+  - right now I have bi directional streaming of files but the files append
+    and do "sync"
   - I need to change how the files are opened.
   - I also now have to re implement the database.
   - I do not need web sockets since the bi directional streaming can handle the changes
 
-- [x] create a socket message that downloads the file from client to server and vise versa
+- [x] create a socket message that downloads the file from client to server
+      and vise versa
 - [ ] figure out how to do file difs
 - [x] attach go to database
 
@@ -152,14 +168,15 @@ If the file status is deleted for more than 30 days or some shit I can remove th
 - [ ] make buf.yamls
 - [ ] maybe use connectrpc
 
-# Risks and Challenges
+## Risks and Challenges
 
 - Identify any potential risks, challenges, or obstacles that may arise.
 
-# Lessons learned/Lessons to Learn
+## Lessons learned/Lessons to Learn
 
 - Reflect on lessons learned during the implementation process.
 
-# Conclusion
+## Conclusion
 
-- Summarize the key points and reiterate the importance of the solution-oriented approach.
+- Summarize the key points and reiterate the importance of the
+  solution-oriented approach.

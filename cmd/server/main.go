@@ -10,14 +10,15 @@ import (
 	"time"
 
 	pb "github.com/itsrobel/sync/filetransfer" // Replace with the actual path to the generated
+	// Replace with the actual path to the generated
 
 	"google.golang.org/grpc"
 )
 
-const (
-	directory = "content"
-	chunkSize = 64 * 1024
-) // Chunk size for streaming files.
+// const (
+// 	directory = "content"
+// 	chunkSize = 64 * 1024
+// ) // Chunk size for streaming files.
 
 type server struct {
 	pb.UnimplementedFileServiceServer
@@ -30,6 +31,34 @@ type clientSession struct {
 	id         string
 	active     bool
 	lastOffset int64
+}
+
+func main() {
+	lis, err := net.Listen("tcp", ":50051")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	s := grpc.NewServer()
+	fileServer := newServer()
+	pb.RegisterFileServiceServer(s, fileServer)
+
+	// Monitor active clients
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+			activeClients := fileServer.GetActiveClients()
+			log.Printf("Active clients: %d\n", len(activeClients))
+			for _, client := range activeClients {
+				log.Printf("Client ID: %s, Last Offset: %d\n", client.id, client.lastOffset)
+			}
+		}
+	}()
+
+	log.Println("Server started on :50051")
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
 }
 
 func newServer() *server {
@@ -125,34 +154,6 @@ func (s *server) GetActiveClients() []*clientSession {
 		}
 	}
 	return activeClients
-}
-
-func main() {
-	lis, err := net.Listen("tcp", ":50051")
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-
-	s := grpc.NewServer()
-	fileServer := newServer()
-	pb.RegisterFileServiceServer(s, fileServer)
-
-	// Monitor active clients
-	go func() {
-		for {
-			time.Sleep(5 * time.Second)
-			activeClients := fileServer.GetActiveClients()
-			log.Printf("Active clients: %d\n", len(activeClients))
-			for _, client := range activeClients {
-				log.Printf("Client ID: %s, Last Offset: %d\n", client.id, client.lastOffset)
-			}
-		}
-	}()
-
-	log.Println("Server started on :50051")
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
 }
 
 func generateClientID() string {

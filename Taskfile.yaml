@@ -6,8 +6,8 @@ tasks:
       - go run main.go
   build:
     cmds:
-      - go build -o ./bin/client client/
-      - go build -o ./bin/server server/main.go
+      - go build -o ./bin/client ./cmd/client
+      - go build -o ./bin/server ./cmd/server
 
     desc: "Build the Go project"
   #TODO: Make tests later

@@ -11,32 +11,16 @@ import (
 	// pb "github.com/itsrobel/sync/filetransfer" // Replace with the actual path to the generated
 
 	pb "github.com/itsrobel/sync/filetransfer"
+	ct "github.com/itsrobel/sync/internal/types"
 	"github.com/itsrobel/sync/internal/watcher"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-const (
-	directory = "content"
-	chunkSize = 64 * 1024
-)
-
-func runClient(id int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Printf("Client %d failed to connect: %v\n", id, err)
-		return
-	}
-	defer conn.Close()
-	// client := pb.NewFileServiceClient(conn)
-	// stream, err := client.TransferFile(context.Background())
-	watcher.WatchFiles(directory)
-
-	// filePath := filepath.Join(directory, "t.md")
-	//
-	// uploadFile(stream, filePath)
-}
+// const (
+// 	directory = "content"
+// 	chunkSize = 64 * 1024
+// )
 
 func main() {
 	// numClients := 3
@@ -51,6 +35,23 @@ func main() {
 	wg.Wait()
 }
 
+func runClient(id int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Printf("Client %d failed to connect: %v\n", id, err)
+		return
+	}
+	defer conn.Close()
+	// client := pb.NewFileServiceClient(conn)
+	// stream, err := client.TransferFile(context.Background())
+	watcher.WatchFiles(ct.Directory)
+
+	// filePath := filepath.Join(directory, "t.md")
+	//
+	// uploadFile(stream, filePath)
+}
+
 // Upload a local file using bidirectional streaming.
 func uploadFile(stream pb.FileService_TransferFileClient, filePath string) {
 	file, openErr := os.Open(filePath)
@@ -60,7 +61,7 @@ func uploadFile(stream pb.FileService_TransferFileClient, filePath string) {
 		return
 	}
 	defer file.Close()
-	buf := make([]byte, chunkSize) // Define your buffer size
+	buf := make([]byte, ct.ChunkSize) // Define your buffer size
 
 	for {
 
@@ -106,7 +107,7 @@ func uploadFile(stream pb.FileService_TransferFileClient, filePath string) {
 }
 
 func saveToFile(filename string, data []byte) error {
-	path, _ := filepath.Abs(fmt.Sprintf("./%s", directory))
+	path, _ := filepath.Abs(fmt.Sprintf("./%s", ct.Directory))
 	filePath := filepath.Join(path, filename)
 
 	file, openErr := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)

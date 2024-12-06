@@ -1,3 +1,2 @@
-./client/sync.db
-./server/sync.db
 ./sync.db
+bin/
