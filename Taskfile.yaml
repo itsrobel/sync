@@ -1,0 +1,33 @@
+version: "3"
+
+tasks:
+  dev:
+    cmds:
+      - go run main.go
+  build:
+    cmds:
+      - go build -o ./bin/client client/
+      - go build -o ./bin/server server/main.go
+
+    desc: "Build the Go project"
+  #TODO: Make tests later
+  # test:
+  #   cmds:
+  #     - go test ./...
+  #   desc: "Run tests"
+
+  docker-build:
+    cmds:
+      - docker build -t sync .
+  docker-run:
+    cmds:
+      - docker run -d -p 80:8080 --name sync_container sync
+  lint:
+    cmds:
+      - golangci-lint run
+    desc: "Lint the code"
+
+  clean:
+    cmds:
+      - rm -rf myapp
+    desc: "Clean the build artifacts"

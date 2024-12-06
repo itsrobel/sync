@@ -1,4 +1,4 @@
-package main
+package datacontroller
 
 import (
 	"context"
@@ -26,8 +26,7 @@ type FileVersion struct {
 	Timestamp time.Time `bson:"time_stamp"` // Time when this version was created
 	Location  string    `bson:"location"`   // File location
 	Contents  string    `bson:"contents"`   // Full contents of the file at this version
-	VersionID int64     `bson:"version_id"` // Unique ID for the file
-	FileID    int64     `bson:"file_id"`    // Unique ID for the file
+	FileID    string    `bson:"file_id"`    // Unique ID for the file
 }
 
 // TODO: when a file is change it can write a change log and then
@@ -36,8 +35,7 @@ type FileChange struct {
 	Timestamp     time.Time `bson:"time_stamp"`     // Time when this version was created
 	ContentChange string    `bson:"content_change"` // Full contents of the file at this version
 	Location      string    `bson:"location"`       // File location
-	VersionID     int64     `bson:"version_id"`     // Unique ID for the file
-	ChangeID      int64     `bson:"change_id"`      // Unique ID for the file
+	VersionID     string    `bson:"version_id"`     // Unique ID for the file
 }
 
 func ensureIndexes(collection *mongo.Collection) error {
@@ -83,12 +81,26 @@ func connectMongo() (*mongo.Client, context.Context) {
 
 // TODO: turn this function into one that accepts a connection as a param
 // TODO: I need to restrict file types
-func createFile(collection *mongo.Collection, location string) {
+func createFile(collection *mongo.Collection, location string) string {
 	file := File{Location: location, Active: true, Contents: ""}
 	err := ensureIndexes(collection)
 	result, err := collection.InsertOne(context.Background(), file)
 	if err != nil {
 		log.Fatal("Error when trying to create a file: ", err)
+	}
+	log.Printf("Inserted document with ID: %s at %s", result.InsertedID, location)
+	return result.InsertedID.(string)
+}
+
+func createFileVersion(collection *mongo.Collection, fileID string) {
+	file, _ := findFile(collection, fileID)
+	location := file.Location
+	contents := file.Contents
+
+	fileVersion := FileVersion{Timestamp: time.Now(), Location: location, Contents: contents, FileID: fileID}
+	result, err := collection.InsertOne(context.Background(), fileVersion)
+	if err != nil {
+		log.Fatal("Error when trying to create a file version: ", err)
 	}
 	log.Printf("Inserted document with ID: %s at %s", result.InsertedID, location)
 }
