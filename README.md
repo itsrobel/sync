@@ -134,7 +134,7 @@ If the file status is deleted for more than 30 days or some shit I can remove th
 ## Todo Items
 
 - [x] attach the directory watch to the client
-- [ ] move the project into using gRPC since it fixes most of my problems
+- [x] move the project into using gRPC since it fixes most of my problems
 
   - right now I have bi directional streaming of files but the files append and do "sync"
   - I need to change how the files are opened.
@@ -144,8 +144,13 @@ If the file status is deleted for more than 30 days or some shit I can remove th
 - [x] create a socket message that downloads the file from client to server and vise versa
 - [ ] figure out how to do file difs
 - [x] attach go to database
+
   - [ ]create the data structures for database and how to query them
   - [ ] make a on start call that populates database with the un-tracked files
+
+- [ ] dockerize
+- [ ] make buf.yamls
+- [ ] maybe use connectrpc
 
 # Risks and Challenges
 

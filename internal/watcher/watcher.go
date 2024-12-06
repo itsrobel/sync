@@ -5,16 +5,17 @@ import (
 	"log"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/itsrobel/sync/internal/datacontroller"
 )
 
 // Watch files and notify all connected clients when a file changes.
 //
 // if the client cant connect to the server, it should watch the files in the directory and send the files to the server when the server is back online
-func watchFiles(path string) {
-	client, _ := connectMongo()
+func WatchFiles(path string) {
+	client, _ := datacontroller.ConnectMongo()
 	watcher, err := fsnotify.NewWatcher()
 	collection := client.Database("sync").Collection("server")
-	documents, _ := getAllDocuments(collection)
+	documents, _ := datacontroller.GetAllDocuments(collection)
 
 	if err != nil {
 		return
@@ -36,11 +37,11 @@ func watchFiles(path string) {
 					return
 				}
 
-				if (event.Op == fsnotify.Create) && validFileExtension(event.Name) {
+				if (event.Op == fsnotify.Create) && datacontroller.ValidFileExtension(event.Name) {
 					log.Println("valid event location:", event)
-					fileID := createFile(collection, event.Name)
+					fileID := datacontroller.CreateFile(collection, event.Name)
 
-					createFileVersion(collection, fileID)
+					datacontroller.CreateFileVersion(collection, fileID)
 
 				}
 

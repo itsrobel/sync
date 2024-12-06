@@ -50,7 +50,7 @@ func ensureIndexes(collection *mongo.Collection) error {
 }
 
 // make this return the conenction
-func connectMongo() (*mongo.Client, context.Context) {
+func ConnectMongo() (*mongo.Client, context.Context) {
 	// Set client options
 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
 	// Connect to MongoDB
@@ -81,7 +81,7 @@ func connectMongo() (*mongo.Client, context.Context) {
 
 // TODO: turn this function into one that accepts a connection as a param
 // TODO: I need to restrict file types
-func createFile(collection *mongo.Collection, location string) string {
+func CreateFile(collection *mongo.Collection, location string) string {
 	file := File{Location: location, Active: true, Contents: ""}
 	err := ensureIndexes(collection)
 	result, err := collection.InsertOne(context.Background(), file)
@@ -92,7 +92,7 @@ func createFile(collection *mongo.Collection, location string) string {
 	return result.InsertedID.(string)
 }
 
-func createFileVersion(collection *mongo.Collection, fileID string) {
+func CreateFileVersion(collection *mongo.Collection, fileID string) {
 	file, _ := findFile(collection, fileID)
 	location := file.Location
 	contents := file.Contents
@@ -111,7 +111,7 @@ func createFileVersion(collection *mongo.Collection, fileID string) {
 
 // TODO: I need to figure out what information I can get from the file watch
 // I need to return ID
-func validFileExtension(location string) bool {
+func ValidFileExtension(location string) bool {
 	extensions := []string{".md", ".pdf"}
 	for _, ext := range extensions {
 		if strings.HasSuffix(location, ext) {
@@ -135,7 +135,7 @@ func findFile(collection *mongo.Collection, location string) (*File, error) {
 	return &result, nil
 }
 
-func getAllDocuments(collection *mongo.Collection) ([]File, error) {
+func GetAllDocuments(collection *mongo.Collection) ([]File, error) {
 	// Create a context (you might want to use a timeout context in a real application)
 	ctx := context.Background()
 

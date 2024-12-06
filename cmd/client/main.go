@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"sync"
 
-	pb "github.com/itsrobel/sync/filetransfer" // Replace with the actual path to the generated
+	// pb "github.com/itsrobel/sync/filetransfer" // Replace with the actual path to the generated
 
+	pb "github.com/itsrobel/sync/filetransfer"
+	"github.com/itsrobel/sync/internal/watcher"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -29,7 +31,7 @@ func runClient(id int, wg *sync.WaitGroup) {
 	defer conn.Close()
 	// client := pb.NewFileServiceClient(conn)
 	// stream, err := client.TransferFile(context.Background())
-	watchFiles(directory)
+	watcher.WatchFiles(directory)
 
 	// filePath := filepath.Join(directory, "t.md")
 	//
