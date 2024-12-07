@@ -4,16 +4,15 @@ package filetransfer;
 option go_package = "github.com/itsrobel/sync/internal/services/filetransfer";
 
 service FileService {
-  rpc StreamFiles(stream FileData) returns (
-      stream
-          FileData); // Bidirectional streaming for file uploads and downloads
-  rpc StreamFileChanges(stream FileChange)
-      returns (stream FileChange); // Bidirectional streaming for file changes
-  rpc DeleteFile(FileRequest) returns (ActionResponse);
-  rpc MoveFile(MoveFileRequest) returns (ActionResponse);
-  rpc TransferFile(stream FileData) returns (stream FileData) {}
+  //rpc StreamFileChanges(stream FileChange) returns (stream FileChange) {}; // Bidirectional streaming for file changes
+  //rpc SendFileToClient(FileRequest) returns (stream FileData) {};
+  rpc SendFileToServer(stream FileData) returns (ActionResponse) {};
+  //rpc DeleteFile(FileRequest) returns (ActionResponse);
+  //rpc MoveFile(MoveFileRequest) returns (ActionResponse);
 }
+// that should then determine the actions of either
 // look up in mongo db if the file exists
+//
 // the file change should be the first it of information that is sent
 // if the file does not exist yeah, then send the entire file
 // TODO: I need to get file differences

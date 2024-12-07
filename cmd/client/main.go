@@ -1,59 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 
-	// pb "github.com/itsrobel/sync/filetransfer" // Replace with the actual path to the generated
-
-	pb "github.com/itsrobel/sync/filetransfer"
+	ft "github.com/itsrobel/sync/internal/services/filetransfer"
+	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
 	ct "github.com/itsrobel/sync/internal/types"
-	"github.com/itsrobel/sync/internal/watcher"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
-// const (
-// 	directory = "content"
-// 	chunkSize = 64 * 1024
-// )
-
 func main() {
-	// numClients := 3
-	var wg sync.WaitGroup
-	// // Start multiple clients
-	// for i := 0; i < numClients; i++ {
-	wg.Add(1)
-	// 	go runClient(i, &wg)
-	// 	time.Sleep(time.Millisecond * 100) // Stagger client starts
-	// }
-	go runClient(1, &wg)
-	wg.Wait()
-}
-
-func runClient(id int, wg *sync.WaitGroup) {
-	defer wg.Done()
-	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Printf("Client %d failed to connect: %v\n", id, err)
-		return
-	}
-	defer conn.Close()
-	// client := pb.NewFileServiceClient(conn)
-	// stream, err := client.TransferFile(context.Background())
-	watcher.WatchFiles(ct.Directory)
-
-	// filePath := filepath.Join(directory, "t.md")
-	//
-	// uploadFile(stream, filePath)
-}
-
-// Upload a local file using bidirectional streaming.
-func uploadFile(stream pb.FileService_TransferFileClient, filePath string) {
+	filePath := "example.txt"
 	file, openErr := os.Open(filePath)
 	id := 1
 	if openErr != nil {
@@ -63,13 +25,16 @@ func uploadFile(stream pb.FileService_TransferFileClient, filePath string) {
 	defer file.Close()
 	buf := make([]byte, ct.ChunkSize) // Define your buffer size
 
+	client := filetransferconnect.NewFileServiceClient(http.DefaultClient, "http://localhost:50051")
+	stream := client.SendFileToServer(context.Background())
+
 	for {
 
 		log.Printf("Trying to upload...")
 		n, readErr := file.Read(buf) // Read from file into buffer
 
 		if n > 0 { // Only send if there's data to send
-			fileData := &pb.FileData{
+			fileData := &ft.FileData{
 				Id:       fmt.Sprintf("%d", id),
 				Location: filepath.Base(filePath), // Use actual filename here
 				Content:  buf[:n],                 // Send only n bytes
@@ -81,18 +46,11 @@ func uploadFile(stream pb.FileService_TransferFileClient, filePath string) {
 				log.Printf("Client %d error sending file data: %v\n", id, err)
 				return
 			}
-			response, err := stream.Recv()
-			if err != nil {
-				log.Printf("Client %d error receiving response: %v\n", id, err)
-				return
-			}
-			log.Printf("Client %d received acknowledgment for chunk: ID=%s, Offset=%d\n",
-				id, response.Id, response.Offset)
 			log.Printf("Sent %d bytes", n)
+			res, _ := stream.CloseAndReceive()
+			log.Printf("Server response: %v", res)
 		}
-		if err := stream.CloseSend(); err != nil {
-			log.Printf("Client %d error closing stream: %v\n", id, err)
-		}
+
 		if readErr == io.EOF {
 			log.Println("Reached end of file")
 			break
@@ -104,24 +62,4 @@ func uploadFile(stream pb.FileService_TransferFileClient, filePath string) {
 		}
 
 	}
-}
-
-func saveToFile(filename string, data []byte) error {
-	path, _ := filepath.Abs(fmt.Sprintf("./%s", ct.Directory))
-	filePath := filepath.Join(path, filename)
-
-	file, openErr := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if openErr != nil {
-		log.Printf("Failed to open local file %s: %v", filename, openErr)
-		return openErr
-	}
-	defer file.Close()
-
-	if _, writeErr := file.Write(data); writeErr != nil {
-		log.Printf("Failed writing data to local file %s: %v", filename, writeErr)
-		return writeErr
-	}
-
-	log.Printf("Successfully saved data to %s", filename)
-	return nil
 }

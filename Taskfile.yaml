@@ -1,9 +1,12 @@
 version: "3"
 
 tasks:
-  dev:
+  server-dev:
     cmds:
-      - go run main.go
+      - go run ./cmd/server/main.go
+  client-dev:
+    cmds:
+      - go run ./cmd/client/main.go
   build:
     cmds:
       - go build -o ./bin/client ./cmd/client
