@@ -167,6 +167,7 @@ the contents and the ID from the sql table
 - [x] dockerize
 - [x] make buf.yamls
 - [x] maybe use connectrpc
+- [ ] merge the client and server data calls with connect rpc to the watcher
 
 ## Risks and Challenges
 
