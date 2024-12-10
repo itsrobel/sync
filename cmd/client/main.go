@@ -26,12 +26,8 @@ func main() {
 func Client() {
 	conn := filetransferconnect.NewFileServiceClient(http.DefaultClient, "http://localhost:50051")
 	filetransfer := &FileTransferClient{conn}
-
-	// watcher.WatchFiles(ct.Directory)
-	//
-	//
 	client := NewWatcherClient(*filetransfer)
-	client.watcher.Watch("/path/to/watch")
+	client.watcher.Watch(ct.Directory)
 }
 
 func (client *FileTransferClient) UploadFile(filePath string) {
