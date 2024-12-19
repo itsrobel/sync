@@ -1,4 +1,4 @@
-package controller
+package db_controller
 
 import (
 	"database/sql"
@@ -6,6 +6,8 @@ import (
 	ct "github.com/itsrobel/sync/internal/types"
 	_ "github.com/mattn/go-sqlite3"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -53,21 +55,55 @@ func initializeTables(db *sql.DB) error {
 	return err
 }
 
+// func ConnectSQLite(dbPath string) (*sql.DB, error) {
+// 	db, err := sql.Open("sqlite3", dbPath)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	if err = db.Ping(); err != nil {
+// 		return nil, err
+// 	}
+//
+// 	if err = initializeTables(db); err != nil {
+// 		return nil, err
+// 	}
+//
+// 	log.Println("Connected to SQLite database!")
+// 	return db, nil
+// }
+
 func ConnectSQLite(dbPath string) (*sql.DB, error) {
+	// Set default database path if none provided
+	if dbPath == "" {
+		dbPath = "./sync.db"
+	}
+
+	// Create database directory if it doesn't exist
+	dbDir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dbDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create database directory: %w", err)
+	}
+
+	// Open database connection (SQLite will create the file if it doesn't exist)
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
+	// Verify connection
 	if err = db.Ping(); err != nil {
-		return nil, err
+		db.Close()
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	// Initialize tables
 	if err = initializeTables(db); err != nil {
-		return nil, err
+		db.Close()
+		return nil, fmt.Errorf("failed to initialize tables: %w", err)
 	}
 
-	log.Println("Connected to SQLite database!")
+	log.Printf("Connected to SQLite database at %s", dbPath)
 	return db, nil
 }
 

@@ -12,9 +12,19 @@ import (
 	ft "github.com/itsrobel/sync/internal/services/filetransfer"
 	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
 	ct "github.com/itsrobel/sync/internal/types"
+	"github.com/itsrobel/sync/internal/watcher"
 )
 
 func main() {
+	fw, err := watcher.InitFileWatcher("", "./content")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer fw.Close()
+}
+
+func test_connect() {
+
 	filePath := "example.txt"
 	file, openErr := os.Open(filePath)
 	id := 1
@@ -29,7 +39,6 @@ func main() {
 	stream := client.SendFileToServer(context.Background())
 
 	for {
-
 		log.Printf("Trying to upload...")
 		n, readErr := file.Read(buf) // Read from file into buffer
 
