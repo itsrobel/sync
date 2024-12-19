@@ -159,11 +159,12 @@ the contents and the ID from the sql table
 - [x] create a socket message that downloads the file from client to server
       and vise versa
 - [ ] figure out how to do file difs
-- [x] attach go to database
+- [ ] attach go to database
+  - [ ] attach go client to sqlite
+  - [ ] attach go server to sqlite
 
   - [ ]create the data structures for database and how to query them
   - [ ] make a on start call that populates database with the un-tracked files
-
 - [x] dockerize
 - [x] make buf.yamls
 - [x] maybe use connectrpc

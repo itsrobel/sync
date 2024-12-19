@@ -1,4 +1,4 @@
-package datacontroller
+package controller
 
 import (
 	"context"
@@ -7,36 +7,11 @@ import (
 	"strings"
 	"time"
 
+	ct "github.com/itsrobel/sync/internal/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
-
-// NOTE: ID's are created by default
-// time?
-type File struct {
-	Location string `bson:"location"`
-	Contents string `bson:"contents"`
-	Active   bool   `bson:"active"` // this can decide whether or not to sync
-}
-
-// Every Hour if changes have been made create a new Version
-// Shouldn't the file just point to the latest version?
-type FileVersion struct {
-	Timestamp time.Time `bson:"time_stamp"` // Time when this version was created
-	Location  string    `bson:"location"`   // File location
-	Contents  string    `bson:"contents"`   // Full contents of the file at this version
-	FileID    string    `bson:"file_id"`    // Unique ID for the file
-}
-
-// TODO: when a file is change it can write a change log and then
-// write to the file to update
-type FileChange struct {
-	Timestamp     time.Time `bson:"time_stamp"`     // Time when this version was created
-	ContentChange string    `bson:"content_change"` // Full contents of the file at this version
-	Location      string    `bson:"location"`       // File location
-	VersionID     string    `bson:"version_id"`     // Unique ID for the file
-}
 
 func ensureIndexes(collection *mongo.Collection) error {
 	_, err := collection.Indexes().CreateOne(
@@ -82,7 +57,7 @@ func ConnectMongo() (*mongo.Client, context.Context) {
 // TODO: turn this function into one that accepts a connection as a param
 // TODO: I need to restrict file types
 func CreateFile(collection *mongo.Collection, location string) string {
-	file := File{Location: location, Active: true, Contents: ""}
+	file := ct.File{Location: location, Active: true, Contents: ""}
 	err := ensureIndexes(collection)
 	result, err := collection.InsertOne(context.Background(), file)
 	if err != nil {
@@ -97,7 +72,7 @@ func CreateFileVersion(collection *mongo.Collection, fileID string) {
 	location := file.Location
 	contents := file.Contents
 
-	fileVersion := FileVersion{Timestamp: time.Now(), Location: location, Contents: contents, FileID: fileID}
+	fileVersion := ct.FileVersion{Timestamp: time.Now(), Location: location, Contents: contents, FileID: fileID}
 	result, err := collection.InsertOne(context.Background(), fileVersion)
 	if err != nil {
 		log.Fatal("Error when trying to create a file version: ", err)
@@ -121,9 +96,9 @@ func ValidFileExtension(location string) bool {
 	return false
 }
 
-func findFile(collection *mongo.Collection, location string) (*File, error) {
+func findFile(collection *mongo.Collection, location string) (*ct.File, error) {
 	filter := bson.M{"location": location}
-	var result File
+	var result ct.File
 	err := collection.FindOne(context.Background(), filter).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -135,7 +110,7 @@ func findFile(collection *mongo.Collection, location string) (*File, error) {
 	return &result, nil
 }
 
-func GetAllDocuments(collection *mongo.Collection) ([]File, error) {
+func GetAllDocuments(collection *mongo.Collection) ([]ct.File, error) {
 	// Create a context (you might want to use a timeout context in a real application)
 	ctx := context.Background()
 
@@ -147,11 +122,11 @@ func GetAllDocuments(collection *mongo.Collection) ([]File, error) {
 	defer cursor.Close(ctx)
 
 	// Create a slice to store the documents
-	var documents []File
+	var documents []ct.File
 
 	// Iterate through the cursor and decode each document
 	for cursor.Next(ctx) {
-		var doc File
+		var doc ct.File
 		if err := cursor.Decode(&doc); err != nil {
 			return nil, err
 		}
