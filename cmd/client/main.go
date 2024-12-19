@@ -20,17 +20,16 @@ type FileTransferClient struct {
 }
 
 func main() {
-	Client()
+	fw, err := watcher.InitFileWatcher("", "./content")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer fw.Close()
 }
 
-func Client() {
-	conn := filetransferconnect.NewFileServiceClient(http.DefaultClient, "http://localhost:50051")
-	filetransfer := &FileTransferClient{conn}
-	client := NewWatcherClient(*filetransfer)
-	client.watcher.Watch(ct.Directory)
-}
+func test_connect() {
 
-func (client *FileTransferClient) UploadFile(filePath string) {
+	filePath := "example.txt"
 	file, openErr := os.Open(filePath)
 	id := 1
 	if openErr != nil {
@@ -43,7 +42,6 @@ func (client *FileTransferClient) UploadFile(filePath string) {
 	stream := client.SendFileToServer(context.Background())
 
 	for {
-
 		log.Printf("Trying to upload...")
 		n, readErr := file.Read(buf) // Read from file into buffer
 		if n > 0 {                   // Only send if there's data to send
