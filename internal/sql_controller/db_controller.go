@@ -14,32 +14,35 @@ import (
 
 func initializeTables(db *sql.DB) error {
 	createFileTable := `
-    CREATE TABLE IF NOT EXISTS files (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        location TEXT UNIQUE,
-        contents TEXT,
-        active BOOLEAN
-    );`
+	    CREATE TABLE IF NOT EXISTS files (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		location TEXT UNIQUE,
+		contents TEXT,
+		active BOOLEAN
+	    );
+	`
 
 	createFileVersionTable := `
-    CREATE TABLE IF NOT EXISTS file_versions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp DATETIME,
-        location TEXT,
-        contents TEXT,
-        file_id INTEGER,
-        FOREIGN KEY(file_id) REFERENCES files(id)
-    );`
+	    CREATE TABLE IF NOT EXISTS file_versions (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME,
+		location TEXT,
+		contents TEXT,
+		file_id INTEGER,
+		FOREIGN KEY(file_id) REFERENCES files(id)
+	    );
+	`
 
 	createFileChangeTable := `
-    CREATE TABLE IF NOT EXISTS file_changes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp DATETIME,
-        content_change TEXT,
-        location TEXT,
-        version_id INTEGER,
-        FOREIGN KEY(version_id) REFERENCES file_versions(id)
-    );`
+	    CREATE TABLE IF NOT EXISTS file_changes (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME,
+		content_change TEXT,
+		location TEXT,
+		version_id INTEGER,
+		FOREIGN KEY(version_id) REFERENCES file_versions(id)
+	    );
+	`
 
 	_, err := db.Exec(createFileTable)
 	if err != nil {
@@ -54,25 +57,6 @@ func initializeTables(db *sql.DB) error {
 	_, err = db.Exec(createFileChangeTable)
 	return err
 }
-
-// func ConnectSQLite(dbPath string) (*sql.DB, error) {
-// 	db, err := sql.Open("sqlite3", dbPath)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	if err = db.Ping(); err != nil {
-// 		return nil, err
-// 	}
-//
-// 	if err = initializeTables(db); err != nil {
-// 		return nil, err
-// 	}
-//
-// 	log.Println("Connected to SQLite database!")
-// 	return db, nil
-// }
-
 func ConnectSQLite(dbPath string) (*sql.DB, error) {
 	// Set default database path if none provided
 	if dbPath == "" {
@@ -107,28 +91,24 @@ func ConnectSQLite(dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
-func CreateFile(db *sql.DB, location string) (int64, error) {
-	stmt, err := db.Prepare("INSERT INTO files(location, active, contents) VALUES(?, ?, ?)")
+func CreateFile(db *sql.DB, location string) (string, error) {
+	stmt, err := db.Prepare("INSERT INTO files(location, active, contents) VALUES(?, ?, ?) RETURNING id")
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 	defer stmt.Close()
 
-	result, err := stmt.Exec(location, true, "")
+	var id string
+	err = stmt.QueryRow(location, true, "").Scan(&id)
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-
-	log.Printf("Inserted file with ID: %d at %s", id, location)
+	log.Printf("Inserted file with ID: %s at %s", id, location)
 	return id, nil
 }
 
-func CreateFileVersion(db *sql.DB, fileID int64) error {
+func CreateFileVersion(db *sql.DB, fileID string) error {
 	file, err := findFile(db, fileID)
 	if err != nil {
 		return err
@@ -137,7 +117,7 @@ func CreateFileVersion(db *sql.DB, fileID int64) error {
 	stmt, err := db.Prepare(`
         INSERT INTO file_versions(timestamp, location, contents, file_id) 
         VALUES(?, ?, ?, ?)
-    `)
+	`)
 	if err != nil {
 		return err
 	}
@@ -145,6 +125,19 @@ func CreateFileVersion(db *sql.DB, fileID int64) error {
 
 	_, err = stmt.Exec(time.Now(), file.Location, file.Contents, fileID)
 	return err
+}
+
+func findFile(db *sql.DB, id string) (*ct.File, error) {
+	var file ct.File
+	err := db.QueryRow("SELECT id, location, contents, active FROM files WHERE id = ?", id).
+		Scan(&file.ID, &file.Location, &file.Contents, &file.Active)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("no file found with id: %s", id)
+		}
+		return nil, err
+	}
+	return &file, nil
 }
 
 func ValidFileExtension(location string) bool {
@@ -155,19 +148,6 @@ func ValidFileExtension(location string) bool {
 		}
 	}
 	return false
-}
-
-func findFile(db *sql.DB, id int64) (*ct.File, error) {
-	var file ct.File
-	err := db.QueryRow("SELECT id, location, contents, active FROM files WHERE id = ?", id).
-		Scan(&file.ID, &file.Location, &file.Contents, &file.Active)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("no file found with id: %d", id)
-		}
-		return nil, err
-	}
-	return &file, nil
 }
 
 func GetAllDocuments(db *sql.DB) ([]ct.File, error) {
