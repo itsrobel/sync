@@ -44,6 +44,7 @@ func Server() {
 	mux := http.NewServeMux()
 	path, handler := filetransferconnect.NewFileServiceHandler(filetransfer)
 	mux.Handle(path, handler)
+	println("Listening on port 50051")
 	http.ListenAndServe("localhost:50051", h2c.NewHandler(mux, &http2.Server{}))
 }
 
