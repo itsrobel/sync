@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	// "time"
+	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/itsrobel/sync/internal/sql_controller"
@@ -12,6 +14,8 @@ import (
 type FileWatcher struct {
 	watcher *fsnotify.Watcher
 	db      *sql.DB
+	done    chan struct{}
+	wg      sync.WaitGroup
 }
 
 func InitFileWatcher(dbPath, watchPath string) (*FileWatcher, error) {
@@ -39,13 +43,16 @@ func InitFileWatcher(dbPath, watchPath string) (*FileWatcher, error) {
 
 	return fw, nil
 }
-
 func (fw *FileWatcher) startWatching(path string) error {
 	if err := fw.watcher.Add(path); err != nil {
 		return fmt.Errorf("failed to add path to watcher: %w", err)
 	}
 
+	fw.done = make(chan struct{})
+	fw.wg.Add(1)
+
 	go func() {
+		defer fw.wg.Done()
 		for {
 			select {
 			case event, ok := <-fw.watcher.Events:
@@ -60,25 +67,18 @@ func (fw *FileWatcher) startWatching(path string) error {
 					return
 				}
 				log.Printf("Watcher error: %v", err)
+			case <-fw.done:
+				return
 			}
 		}
 	}()
 
 	fmt.Printf("Watching directory: %s\n", path)
-	<-make(chan struct{})
+
+	// Block until done channel is closed
+	<-fw.done
 	return nil
 }
-
-func (fw *FileWatcher) Close() error {
-	if err := fw.watcher.Close(); err != nil {
-		return fmt.Errorf("failed to close watcher: %w", err)
-	}
-	if err := fw.db.Close(); err != nil {
-		return fmt.Errorf("failed to close database: %w", err)
-	}
-	return nil
-}
-
 func (fw *FileWatcher) handleEvent(event fsnotify.Event) error {
 	if event.Op == fsnotify.Create && db_controller.ValidFileExtension(event.Name) {
 		log.Printf("New file created: %s", event.Name)
@@ -96,4 +96,11 @@ func (fw *FileWatcher) handleEvent(event fsnotify.Event) error {
 		log.Printf("Modified file: %s", event.Name)
 	}
 	return nil
+}
+
+func (fw *FileWatcher) Stop() {
+	if fw.done != nil {
+		close(fw.done)
+		fw.wg.Wait()
+	}
 }
