@@ -3,16 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"os"
-	"path/filepath"
-
 	ft "github.com/itsrobel/sync/internal/services/filetransfer"
 	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
 	ct "github.com/itsrobel/sync/internal/types"
 	"github.com/itsrobel/sync/internal/watcher"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
 )
 
 type FileTransferClient struct {
@@ -20,13 +21,23 @@ type FileTransferClient struct {
 }
 
 func main() {
+	test_watcher()
+}
+
+func test_watcher() {
 	fw, err := watcher.InitFileWatcher("", "./content")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer fw.Close()
-}
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	go func() {
+		<-sigChan
+		fw.Stop()
+	}()
+}
 func test_connect() {
 
 	filePath := "example.txt"
