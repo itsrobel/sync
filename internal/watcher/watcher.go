@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"log"
 	// "time"
+	"io"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/itsrobel/sync/internal/sql_controller"
+	"os"
+	"strings"
 )
 
 type FileWatcher struct {
@@ -23,8 +26,12 @@ func InitFileWatcher(dbPath, watchPath string) (*FileWatcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
-
 	db, err := db_controller.ConnectSQLite(dbPath)
+	files, _ := db_controller.GetAllFiles(db)
+	log.Println(files)
+	if files != nil {
+		log.Println(db_controller.GetAllFileVersions(db, files[0].ID))
+	}
 	if err != nil {
 		watcher.Close()
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -74,26 +81,55 @@ func (fw *FileWatcher) startWatching(path string) error {
 	}()
 
 	fmt.Printf("Watching directory: %s\n", path)
-
 	// Block until done channel is closed
 	<-fw.done
 	return nil
 }
 func (fw *FileWatcher) handleEvent(event fsnotify.Event) error {
-	if event.Op == fsnotify.Create && db_controller.ValidFileExtension(event.Name) {
-		log.Printf("New file created: %s", event.Name)
-		fileID, err := db_controller.CreateFile(fw.db, event.Name)
-		if err != nil {
-			return fmt.Errorf("failed to create file record: %w", err)
+	// log.Printf("File Event: %s, File Location %s", event.Op, event.Name)
+	if event.Op&fsnotify.Create == fsnotify.Create && db_controller.ValidFileExtension(event.Name) {
+		log.Printf("New file create Event: %s", event.Name)
+		isFile, _ := db_controller.FindFileByLocation(fw.db, event.Name)
+		var fileID string
+		if isFile == nil {
+			log.Printf("Create new file at: %s", event.Name)
+			fileID, _ = db_controller.CreateFile(fw.db, event.Name)
+			// if err != nil {
+			// 	return fmt.Errorf("failed to create file record: %w", err)
+			// }
+		} else {
+			log.Printf("File exists at: %s", event.Name)
+			fileID = isFile.ID
 		}
 
-		if err := db_controller.CreateFileVersion(fw.db, fileID); err != nil {
+		if err := db_controller.CreateFileVersion(fw.db, fileID, event.Name); err != nil {
 			return fmt.Errorf("failed to create file version: %w", err)
 		}
 	}
+	if event.Op&fsnotify.Write == fsnotify.Write && db_controller.ValidFileExtension(event.Name) {
+		isFile, _ := db_controller.FindFileByLocation(fw.db, event.Name)
+		file, err := os.Open(event.Name) // Note: using event.Name instead of "filename.txt"
+		if err != nil {
+			return fmt.Errorf("failed to open file: %w", err)
+		}
+		defer file.Close()
 
-	if event.Op&fsnotify.Write == fsnotify.Write {
-		log.Printf("Modified file: %s", event.Name)
+		var content strings.Builder
+		buf := make([]byte, 8192) // Using 8KB buffer size
+		for {
+			n, err := file.Read(buf)
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("failed to read file: %w", err)
+			}
+			content.Write(buf[:n])
+		}
+
+		if err := db_controller.CreateFileVersion(fw.db, isFile.ID, content.String()); err != nil {
+			return fmt.Errorf("failed to create file version: %w", err)
+		}
 	}
 	return nil
 }
