@@ -182,3 +182,10 @@ the contents and the ID from the sql table
 
 - Summarize the key points and reiterate the importance of the
   solution-oriented approach.
+
+
+
+I need a interval period of file changes like a memory queue that keeps track of the things that happen to the file and the current state
+
+https://excalidraw.com/#json=bQJDPcZEzUkbzQrHR1t1r,NgVZJusMtruL-t0eVLhg2Q
+
