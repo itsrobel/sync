@@ -158,12 +158,16 @@ the contents and the ID from the sql table
 
 - [x] create a socket message that downloads the file from client to server
       and vise versa
-- [ ] figure out how to do file difs
-- [ ] attach go to database
-  - [ ] attach go client to sqlite
-  - [ ] attach go server to sqlite
+- [x] figure out how to do file difs
+- [x]create the data structures for database and how to query them
+- [x] attach go to database
+  - [x] attach go client to sqlite
+  - [x] attch go server to mongodb  
 
-  - [ ]create the data structures for database and how to query them
+  - [ ] connect the updated client to the server
+  - [ ] reconstruct the file data based on what is in  servers mongodb tables
+  - [ ] create a tooling to list the changes and the versions made to a file
+
   - [ ] make a on start call that populates database with the un-tracked files
 - [x] dockerize
 - [x] make buf.yamls
@@ -183,9 +187,7 @@ the contents and the ID from the sql table
 - Summarize the key points and reiterate the importance of the
   solution-oriented approach.
 
+I need a interval period of file changes like a memory queue that keeps track
+of the things that happen to the file and the current state
 
-
-I need a interval period of file changes like a memory queue that keeps track of the things that happen to the file and the current state
-
-https://excalidraw.com/#json=bQJDPcZEzUkbzQrHR1t1r,NgVZJusMtruL-t0eVLhg2Q
-
+[project](https://excalidraw.com/#json=bQJDPcZEzUkbzQrHR1t1r,NgVZJusMtruL-t0eVLhg2Q)

@@ -13,6 +13,8 @@ require (
 
 require (
 	github.com/golang/snappy v0.0.4 // indirect
+	github.com/huandu/go-sqlbuilder v1.33.1 // indirect
+	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
