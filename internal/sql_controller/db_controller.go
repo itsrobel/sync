@@ -239,7 +239,7 @@ func storeFileVersion(tx *sql.Tx, location, contents, fileID string) (string, er
 func storeChange(tx *sql.Tx, versionID string, change ct.FileChange) error {
 	stmt, err := tx.Prepare(`
         INSERT INTO file_changes(type, content, position, version_id)
-        VALUES(lower(hex(randomblob(16))), ?, ?, ?, ?)
+        VALUES(?, ?, ?, ?)
     `)
 	if err != nil {
 		return err
