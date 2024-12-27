@@ -3,14 +3,62 @@ package db_controller
 import (
 	"database/sql"
 	"fmt"
+	// "github.com/huandu/go-sqlbuilder"
 	ct "github.com/itsrobel/sync/internal/types"
 	_ "github.com/mattn/go-sqlite3"
 	"log"
 	"os"
 	"path/filepath"
-	"sort"
+	"reflect"
 	"strings"
+	"time"
 )
+
+func BuildCreateTableStmt(structType interface{}, tableName string) string {
+	t := reflect.TypeOf(structType)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+
+	var columns []string
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		columnName := field.Name
+		tag := field.Tag.Get("bson")
+		if tag != "" {
+			columnName = tag
+		}
+
+		sqlType := getSQLType(field.Type.Kind())
+		column := fmt.Sprintf("%s %s", strings.ToLower(columnName), sqlType)
+
+		if field.Name == "ID" {
+			column += " PRIMARY KEY DEFAULT (lower(hex(randomblob(16))))"
+		}
+
+		columns = append(columns, column)
+	}
+	log.Print("Prepared Table: ", tableName)
+
+	return fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n\t%s\n);",
+		tableName,
+		strings.Join(columns, ",\n\t"))
+}
+
+func getSQLType(k reflect.Kind) string {
+	switch k {
+	case reflect.String:
+		return "TEXT"
+	case reflect.Bool:
+		return "BOOLEAN"
+	case reflect.Int, reflect.Int32, reflect.Int64:
+		return "INTEGER"
+	case reflect.Float32, reflect.Float64:
+		return "REAL"
+	default:
+		return "TEXT"
+	}
+}
 
 func initializeTables(db *sql.DB) error {
 	createFileTable := `
@@ -36,9 +84,10 @@ func initializeTables(db *sql.DB) error {
 	createFileChangeTable := `
 	    CREATE TABLE IF NOT EXISTS file_changes (
 		id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-		timestamp DATETIME,
-		content_change TEXT,
+		content TEXT,
 		location TEXT,
+		type TEXT,
+		position INTEGER,
 		version_id INTEGER,
 		FOREIGN KEY(version_id) REFERENCES file_versions(id)
 	    );
@@ -84,7 +133,15 @@ func ConnectSQLite(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	// createTableFiles := BuildCreateTableStmt(ct.File{}, "files")
+	// createTableFileVersions := BuildCreateTableStmt(ct.FileVersion{}, "file_versions")
+	// createTableFileChanges := BuildCreateTableStmt(ct.FileChange{}, "file_changes")
+	// db.Exec(createTableFiles)
+	// db.Exec(createTableFileVersions)
+	// db.Exec(createTableFileChanges)
+
 	// Initialize tables
+
 	if err = initializeTables(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to initialize tables: %w", err)
@@ -111,68 +168,26 @@ func CreateFile(db *sql.DB, location string) (string, error) {
 	return id, nil
 }
 
-// func CreateFileVersion(db *sql.DB, fileID, newContent string) error {
-// 	file, err := findFileById(db, fileID)
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	// Get current and new content as lines
-// 	currentLines := strings.Split(file.Contents, "\n")
-// 	newLines := strings.Split(newContent, "\n")
-//
-// 	// Calculate diff using unified diff format
-// 	diff := difflib.UnifiedDiff{
-// 		A:        currentLines,
-// 		B:        newLines,
-// 		FromFile: "previous",
-// 		ToFile:   "current",
-// 		Context:  3,
-// 	}
-//
-// 	diffText, err := difflib.GetUnifiedDiffString(diff)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to generate diff: %w", err)
-// 	}
-//
-// 	tx, err := db.Begin()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer tx.Rollback()
-//
-// 	// Update the current file contents
-// 	_, err = tx.Exec("UPDATE files SET contents = ? WHERE id = ?", newContent, fileID)
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	// Store the diff in the version
-// 	stmt, err := tx.Prepare(`
-//         INSERT INTO file_versions(timestamp, location, contents, file_id)
-//         VALUES(?, ?, ?, ?)
-// 	`)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer stmt.Close()
-//
-// 	_, err = stmt.Exec(time.Now(), file.Location, diffText, fileID)
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	return tx.Commit()
-// }
-
 func CreateFileVersion(db *sql.DB, fileID, newContent string) error {
 	file, err := findFileById(db, fileID)
 	if err != nil {
 		return err
 	}
 
-	// Get changes between versions
-	changes := getChangesBetweenVersions(file.Contents, newContent)
+	// Get the latest version
+	lastVersion, err := getLatestVersion(db, fileID)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+
+	// Calculate changes from the last version
+	var changes []ct.FileChange
+	if lastVersion != nil {
+		changes = getChangesBetweenVersions(lastVersion.Contents, newContent)
+	} else {
+		// If this is the first version, treat all lines as additions
+		changes = getInitialChanges(newContent)
+	}
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -180,21 +195,124 @@ func CreateFileVersion(db *sql.DB, fileID, newContent string) error {
 	}
 	defer tx.Rollback()
 
-	// Update current file content
-	_, err = tx.Exec("UPDATE files SET contents = ? WHERE id = ?", newContent, fileID)
+	// Create new version
+	versionID, err := storeFileVersion(tx, file.Location, newContent, fileID)
 	if err != nil {
 		return err
 	}
 
-	// Store each change
+	// Store changes associated with this version
 	for _, change := range changes {
-		err = storeChange(tx, fileID, change)
-		if err != nil {
+		if err := storeChange(tx, versionID, change); err != nil {
 			return err
 		}
 	}
 
+	// Update current file content
+	if err := updateFileContent(tx, fileID, newContent); err != nil {
+		return err
+	}
+
 	return tx.Commit()
+}
+
+func storeFileVersion(tx *sql.Tx, location, contents, fileID string) (string, error) {
+	stmt, err := tx.Prepare(`
+        INSERT INTO file_versions(id, timestamp, location, contents, file_id)
+        VALUES(lower(hex(randomblob(16))), ?, ?, ?, ?)
+        RETURNING id
+    `)
+	if err != nil {
+		return "", err
+	}
+	defer stmt.Close()
+
+	var versionID string
+	err = stmt.QueryRow(time.Now(), location, contents, fileID).Scan(&versionID)
+	if err != nil {
+		return "", err
+	}
+
+	return versionID, nil
+}
+
+func storeChange(tx *sql.Tx, versionID string, change ct.FileChange) error {
+	stmt, err := tx.Prepare(`
+        INSERT INTO file_changes(type, content, position, version_id)
+        VALUES(lower(hex(randomblob(16))), ?, ?, ?, ?)
+    `)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(change.Type, change.Content, change.Position, versionID)
+	return err
+}
+
+func getLatestVersion(db *sql.DB, fileID string) (*ct.FileVersion, error) {
+	var version ct.FileVersion
+	err := db.QueryRow(`
+        SELECT id, timestamp, location, contents, file_id 
+        FROM file_versions 
+        WHERE file_id = ? 
+        ORDER BY timestamp DESC 
+        LIMIT 1
+    `, fileID).Scan(&version.FileID, &version.Timestamp, &version.Location, &version.Contents, &version.FileID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Get changes associated with this version
+	// changes, err := getVersionChanges(db, version.FileID)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// version.Changes = changes
+
+	return &version, nil
+}
+
+func getVersionChanges(db *sql.DB, versionID string) ([]ct.FileChange, error) {
+	rows, err := db.Query(`
+        SELECT type, content, position 
+        FROM file_changes 
+        WHERE version_id = ? 
+        ORDER BY position
+    `, versionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var changes []ct.FileChange
+	for rows.Next() {
+		var change ct.FileChange
+		if err := rows.Scan(&change.Type, &change.Content, &change.Position); err != nil {
+			return nil, err
+		}
+		changes = append(changes, change)
+	}
+	return changes, rows.Err()
+}
+
+func updateFileContent(tx *sql.Tx, fileID, newContent string) error {
+	_, err := tx.Exec("UPDATE files SET contents = ? WHERE id = ?", newContent, fileID)
+	return err
+}
+
+func getInitialChanges(content string) []ct.FileChange {
+	lines := strings.Split(content, "\n")
+	changes := make([]ct.FileChange, len(lines))
+	for i, line := range lines {
+		changes[i] = ct.FileChange{
+			Type:     "add",
+			Content:  line,
+			Position: i,
+		}
+	}
+	return changes
 }
 
 func getChangesBetweenVersions(oldContent, newContent string) []ct.FileChange {
@@ -206,7 +324,6 @@ func getChangesBetweenVersions(oldContent, newContent string) []ct.FileChange {
 
 	for _, line := range newLines {
 		if position >= len(oldLines) {
-			// New line added at the end
 			changes = append(changes, ct.FileChange{
 				Type:     "add",
 				Content:  line,
@@ -214,14 +331,12 @@ func getChangesBetweenVersions(oldContent, newContent string) []ct.FileChange {
 			})
 		} else if line != oldLines[position] {
 			if containsLine(oldLines[position:], line) {
-				// Line was added
 				changes = append(changes, ct.FileChange{
 					Type:     "add",
 					Content:  line,
 					Position: position,
 				})
 			} else if containsLine(newLines[position:], oldLines[position]) {
-				// Line was removed
 				changes = append(changes, ct.FileChange{
 					Type:     "remove",
 					Content:  oldLines[position],
@@ -233,7 +348,6 @@ func getChangesBetweenVersions(oldContent, newContent string) []ct.FileChange {
 		position++
 	}
 
-	// Check for remaining lines that were removed
 	for i := position; i < len(oldLines); i++ {
 		changes = append(changes, ct.FileChange{
 			Type:     "remove",
@@ -245,47 +359,6 @@ func getChangesBetweenVersions(oldContent, newContent string) []ct.FileChange {
 	return changes
 }
 
-func applyChanges(content string, changes []ct.FileChange) string {
-	lines := strings.Split(content, "\n")
-
-	// Sort changes by position in reverse order to avoid position shifts
-	sort.Slice(changes, func(i, j int) bool {
-		return changes[i].Position > changes[j].Position
-	})
-
-	for _, change := range changes {
-		if change.Type == "add" {
-			// Insert new line
-			if change.Position >= len(lines) {
-				lines = append(lines, change.Content)
-			} else {
-				lines = append(lines[:change.Position], append([]string{change.Content}, lines[change.Position:]...)...)
-			}
-		} else if change.Type == "remove" {
-			// Remove line
-			if change.Position < len(lines) {
-				lines = append(lines[:change.Position], lines[change.Position+1:]...)
-			}
-		}
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-func storeChange(tx *sql.Tx, fileID string, change ct.FileChange) error {
-	stmt, err := tx.Prepare(`
-        INSERT INTO file_changes(type, content, position, file_id)
-        VALUES(?, ?, ?, ?)
-    `)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(change.Type, change.Content, change.Position, fileID)
-	return err
-}
-
 func containsLine(lines []string, line string) bool {
 	for _, l := range lines {
 		if l == line {
@@ -294,7 +367,6 @@ func containsLine(lines []string, line string) bool {
 	}
 	return false
 }
-
 func findFileById(db *sql.DB, id string) (*ct.File, error) {
 	var file ct.File
 	err := db.QueryRow("SELECT id, location, contents, active FROM files WHERE id = ?", id).
