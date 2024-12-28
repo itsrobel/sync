@@ -21,7 +21,25 @@ type FileTransferClient struct {
 }
 
 func main() {
-	test_watcher()
+	// test_watcher()
+	test_on_start()
+}
+
+func test_on_start() {
+	file, err := os.Open("./content")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	names, err := file.Readdirnames(0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, name := range names {
+		fmt.Println(name)
+	}
+
 }
 
 func test_watcher() {

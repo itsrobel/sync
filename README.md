@@ -174,6 +174,17 @@ the contents and the ID from the sql table
 - [x] maybe use connectrpc
 - [ ] merge the client and server data calls with connect rpc to the watcher
 
+## I need to focus on finishing the project into a working demo duck everything else
+
+- [ ] the latest version of the file will just be the file itself
+- [ ] when the client starts check all files in the target directory
+- [ ] try server connection on client start
+
+### Bonus
+
+- [ ] The fileversions need to be diffs in a order that can than
+      reconstructed on fileID request
+
 ## Risks and Challenges
 
 - Identify any potential risks, challenges, or obstacles that may arise.
