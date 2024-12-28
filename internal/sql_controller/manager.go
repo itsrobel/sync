@@ -175,19 +175,19 @@ func CreateFileVersion(db *sql.DB, fileID, newContent string) error {
 	}
 
 	// Get the latest version
-	lastVersion, err := getLatestVersion(db, fileID)
-	if err != nil && err != sql.ErrNoRows {
-		return err
-	}
+	// lastVersion, err := getLatestVersion(db, fileID)
+	// if err != nil && err != sql.ErrNoRows {
+	// 	return err
+	// }
 
 	// Calculate changes from the last version
-	var changes []ct.FileChange
-	if lastVersion != nil {
-		changes = getChangesBetweenVersions(lastVersion.Contents, newContent)
-	} else {
-		// If this is the first version, treat all lines as additions
-		changes = getInitialChanges(newContent)
-	}
+	// var changes []ct.FileChange
+	// if lastVersion != nil {
+	// 	changes = getChangesBetweenVersions(lastVersion.Contents, newContent)
+	// } else {
+	// 	// If this is the first version, treat all lines as additions
+	// 	changes = getInitialChanges(newContent)
+	// }
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -196,17 +196,13 @@ func CreateFileVersion(db *sql.DB, fileID, newContent string) error {
 	defer tx.Rollback()
 
 	// Create new version
-	versionID, err := storeFileVersion(tx, file.Location, newContent, fileID)
-	if err != nil {
-		return err
-	}
-
+	storeFileVersion(tx, file.Location, newContent, fileID)
 	// Store changes associated with this version
-	for _, change := range changes {
-		if err := storeChange(tx, versionID, change); err != nil {
-			return err
-		}
-	}
+	// for _, change := range changes {
+	// 	if err := storeChange(tx, versionID, change); err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	// Update current file content
 	if err := updateFileContent(tx, fileID, newContent); err != nil {

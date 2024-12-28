@@ -27,11 +27,11 @@ func InitFileWatcher(dbPath, watchPath string) (*FileWatcher, error) {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
 	db, err := db_controller.ConnectSQLite(dbPath)
-	files, _ := db_controller.GetAllFiles(db)
-	log.Println(files)
-	if files != nil {
-		log.Println(db_controller.GetAllFileVersions(db, files[0].ID))
-	}
+	// files, _ := db_controller.GetAllFiles(db)
+	// log.Println(files)
+	// if files != nil {
+	// 	log.Println(db_controller.GetAllFileVersions(db, files[0].ID))
+	// }
 	if err != nil {
 		watcher.Close()
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -87,26 +87,24 @@ func (fw *FileWatcher) startWatching(path string) error {
 }
 func (fw *FileWatcher) handleEvent(event fsnotify.Event) error {
 	// log.Printf("File Event: %s, File Location %s", event.Op, event.Name)
+	//TODO: fix the triggered create event
 	if event.Op&fsnotify.Create == fsnotify.Create && db_controller.ValidFileExtension(event.Name) {
 		log.Printf("New file create Event: %s", event.Name)
 		isFile, _ := db_controller.FindFileByLocation(fw.db, event.Name)
-		var fileID string
+		// var fileID string
 		if isFile == nil {
 			log.Printf("Create new file at: %s", event.Name)
-			fileID, _ = db_controller.CreateFile(fw.db, event.Name)
+			db_controller.CreateFile(fw.db, event.Name)
 			// if err != nil {
 			// 	return fmt.Errorf("failed to create file record: %w", err)
 			// }
 		} else {
 			log.Printf("File exists at: %s", event.Name)
-			fileID = isFile.ID
 		}
 
-		if err := db_controller.CreateFileVersion(fw.db, fileID, event.Name); err != nil {
-			return fmt.Errorf("failed to create file version: %w", err)
-		}
 	}
 	if event.Op&fsnotify.Write == fsnotify.Write && db_controller.ValidFileExtension(event.Name) {
+
 		isFile, _ := db_controller.FindFileByLocation(fw.db, event.Name)
 		file, err := os.Open(event.Name) // Note: using event.Name instead of "filename.txt"
 		if err != nil {
