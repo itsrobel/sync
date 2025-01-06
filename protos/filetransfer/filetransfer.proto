@@ -7,6 +7,7 @@ service FileService {
   //rpc StreamFileChanges(stream FileChange) returns (stream FileChange) {}; // Bidirectional streaming for file changes
   //rpc SendFileToClient(FileRequest) returns (stream FileData) {};
   rpc SendFileToServer(stream FileData) returns (ActionResponse) {};
+  rpc ValidateServer(ActionResponse) returns  (ActionResponse) {};
   //rpc DeleteFile(FileRequest) returns (ActionResponse);
   //rpc MoveFile(MoveFileRequest) returns (ActionResponse);
 }
@@ -49,3 +50,4 @@ message ActionResponse {
   bool success = 1;
   string message = 2;
 }
+

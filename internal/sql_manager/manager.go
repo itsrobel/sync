@@ -1,17 +1,19 @@
-package db_controller
+package sql_manager
 
 import (
 	"database/sql"
 	"fmt"
+
 	// "github.com/huandu/go-sqlbuilder"
-	ct "github.com/itsrobel/sync/internal/types"
-	_ "github.com/mattn/go-sqlite3"
 	"log"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
+
+	ct "github.com/itsrobel/sync/internal/types"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func BuildCreateTableStmt(structType interface{}, tableName string) string {
@@ -109,6 +111,7 @@ func initializeTables(db *sql.DB) error {
 	_, err = db.Exec(createFileChangeTable)
 	return err
 }
+
 func ConnectSQLite(dbPath string) (*sql.DB, error) {
 	// Set default database path if none provided
 	if dbPath == "" {
@@ -255,7 +258,6 @@ func getLatestVersion(db *sql.DB, fileID string) (*ct.FileVersion, error) {
         ORDER BY timestamp DESC 
         LIMIT 1
     `, fileID).Scan(&version.FileID, &version.Timestamp, &version.Location, &version.Contents, &version.FileID)
-
 	if err != nil {
 		return nil, err
 	}
@@ -363,6 +365,7 @@ func containsLine(lines []string, line string) bool {
 	}
 	return false
 }
+
 func findFileById(db *sql.DB, id string) (*ct.File, error) {
 	var file ct.File
 	err := db.QueryRow("SELECT id, location, contents, active FROM files WHERE id = ?", id).
