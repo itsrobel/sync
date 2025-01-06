@@ -36,12 +36,16 @@ const (
 	// FileServiceSendFileToServerProcedure is the fully-qualified name of the FileService's
 	// SendFileToServer RPC.
 	FileServiceSendFileToServerProcedure = "/filetransfer.FileService/SendFileToServer"
+	// FileServiceValidateServerProcedure is the fully-qualified name of the FileService's
+	// ValidateServer RPC.
+	FileServiceValidateServerProcedure = "/filetransfer.FileService/ValidateServer"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
 	fileServiceServiceDescriptor                = filetransfer.File_filetransfer_filetransfer_proto.Services().ByName("FileService")
 	fileServiceSendFileToServerMethodDescriptor = fileServiceServiceDescriptor.Methods().ByName("SendFileToServer")
+	fileServiceValidateServerMethodDescriptor   = fileServiceServiceDescriptor.Methods().ByName("ValidateServer")
 )
 
 // FileServiceClient is a client for the filetransfer.FileService service.
@@ -49,6 +53,7 @@ type FileServiceClient interface {
 	// rpc StreamFileChanges(stream FileChange) returns (stream FileChange) {}; // Bidirectional streaming for file changes
 	// rpc SendFileToClient(FileRequest) returns (stream FileData) {};
 	SendFileToServer(context.Context) *connect.ClientStreamForClient[filetransfer.FileData, filetransfer.ActionResponse]
+	ValidateServer(context.Context, *connect.Request[filetransfer.ActionResponse]) (*connect.Response[filetransfer.ActionResponse], error)
 }
 
 // NewFileServiceClient constructs a client for the filetransfer.FileService service. By default, it
@@ -67,12 +72,19 @@ func NewFileServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(fileServiceSendFileToServerMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		validateServer: connect.NewClient[filetransfer.ActionResponse, filetransfer.ActionResponse](
+			httpClient,
+			baseURL+FileServiceValidateServerProcedure,
+			connect.WithSchema(fileServiceValidateServerMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // fileServiceClient implements FileServiceClient.
 type fileServiceClient struct {
 	sendFileToServer *connect.Client[filetransfer.FileData, filetransfer.ActionResponse]
+	validateServer   *connect.Client[filetransfer.ActionResponse, filetransfer.ActionResponse]
 }
 
 // SendFileToServer calls filetransfer.FileService.SendFileToServer.
@@ -80,11 +92,17 @@ func (c *fileServiceClient) SendFileToServer(ctx context.Context) *connect.Clien
 	return c.sendFileToServer.CallClientStream(ctx)
 }
 
+// ValidateServer calls filetransfer.FileService.ValidateServer.
+func (c *fileServiceClient) ValidateServer(ctx context.Context, req *connect.Request[filetransfer.ActionResponse]) (*connect.Response[filetransfer.ActionResponse], error) {
+	return c.validateServer.CallUnary(ctx, req)
+}
+
 // FileServiceHandler is an implementation of the filetransfer.FileService service.
 type FileServiceHandler interface {
 	// rpc StreamFileChanges(stream FileChange) returns (stream FileChange) {}; // Bidirectional streaming for file changes
 	// rpc SendFileToClient(FileRequest) returns (stream FileData) {};
 	SendFileToServer(context.Context, *connect.ClientStream[filetransfer.FileData]) (*connect.Response[filetransfer.ActionResponse], error)
+	ValidateServer(context.Context, *connect.Request[filetransfer.ActionResponse]) (*connect.Response[filetransfer.ActionResponse], error)
 }
 
 // NewFileServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -99,10 +117,18 @@ func NewFileServiceHandler(svc FileServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(fileServiceSendFileToServerMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	fileServiceValidateServerHandler := connect.NewUnaryHandler(
+		FileServiceValidateServerProcedure,
+		svc.ValidateServer,
+		connect.WithSchema(fileServiceValidateServerMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/filetransfer.FileService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case FileServiceSendFileToServerProcedure:
 			fileServiceSendFileToServerHandler.ServeHTTP(w, r)
+		case FileServiceValidateServerProcedure:
+			fileServiceValidateServerHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -114,4 +140,8 @@ type UnimplementedFileServiceHandler struct{}
 
 func (UnimplementedFileServiceHandler) SendFileToServer(context.Context, *connect.ClientStream[filetransfer.FileData]) (*connect.Response[filetransfer.ActionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("filetransfer.FileService.SendFileToServer is not implemented"))
+}
+
+func (UnimplementedFileServiceHandler) ValidateServer(context.Context, *connect.Request[filetransfer.ActionResponse]) (*connect.Response[filetransfer.ActionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("filetransfer.FileService.ValidateServer is not implemented"))
 }

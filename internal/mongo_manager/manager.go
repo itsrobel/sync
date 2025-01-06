@@ -1,4 +1,4 @@
-package controller
+package manager
 
 import (
 	"context"
@@ -25,27 +25,6 @@ func ensureIndexes(collection *mongo.Collection) error {
 }
 
 // make this return the conenction
-func ConnectMongo() (*mongo.Client, context.Context) {
-	// Set client options
-	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
-	// Connect to MongoDB
-	client, err := mongo.Connect(context.Background(), clientOptions)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Check the connection
-	// The connection context only lasts as long as specified in the timemout, since
-	// We are running these commands not on a time frame we should be able to use contex.TODO although that is likely
-	// not best practice
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err = client.Ping(ctx, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("Connected to MongoDB!")
-	return client, ctx
-}
 
 // func updateFile(client *mongo.Client, location string, content string) {
 // 	collection := client.Database("sync").Collection("server")
@@ -54,8 +33,6 @@ func ConnectMongo() (*mongo.Client, context.Context) {
 // 	// find the fileID of the file with the specified location
 // }
 
-// TODO: turn this function into one that accepts a connection as a param
-// TODO: I need to restrict file types
 func CreateFile(collection *mongo.Collection, location string) string {
 	file := ct.File{Location: location, Active: true, Contents: ""}
 	err := ensureIndexes(collection)

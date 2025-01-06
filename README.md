@@ -161,23 +161,33 @@ the contents and the ID from the sql table
 - [x] figure out how to do file difs
 - [x]create the data structures for database and how to query them
 - [x] attach go to database
+
   - [x] attach go client to sqlite
-  - [x] attch go server to mongodb  
+  - [x] attch go server to mongodb
 
   - [ ] connect the updated client to the server
-  - [ ] reconstruct the file data based on what is in  servers mongodb tables
+  - [ ] reconstruct the file data based on what is in servers mongodb tables
   - [ ] create a tooling to list the changes and the versions made to a file
 
   - [ ] make a on start call that populates database with the un-tracked files
+
 - [x] dockerize
 - [x] make buf.yamls
 - [x] maybe use connectrpc
 
 ## I need to focus on finishing the project into a working demo duck everything else
 
-- [ ] the latest version of the file will just be the file itself
-- [ ] when the client starts check all files in the target directory
-- [ ] try server connection on client start
+- [x] the latest version of the file will just be the file itself
+  - [ ] I need a function to get the latest version of a file
+- [x] when the client starts check all files in the target directory
+
+  - a new version of each file is created
+
+- [x] try server connection on client start
+- [ ] upload files if connection is made
+      have the connection request be on conditional
+- [ ] update send the file update to server when client is connected
+- [ ] make the ping/pong for the server to client connection to check live
 
 ### Bonus
 
