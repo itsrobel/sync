@@ -167,9 +167,8 @@ the contents and the ID from the sql table
 
   - [ ] connect the updated client to the server
   - [ ] reconstruct the file data based on what is in servers mongodb tables
-  - [ ] create a tooling to list the changes and the versions made to a file
-
-  - [ ] make a on start call that populates database with the un-tracked files
+  - [x] create a tooling to list the changes and the versions made to a file
+  - [x] make a on start call that populates database with the un-tracked files
 
 - [x] dockerize
 - [x] make buf.yamls
@@ -185,10 +184,16 @@ the contents and the ID from the sql table
   - a new version of each file is created
 
 - [x] try server connection on client start
-- [ ] upload files if connection is made
+- [x] upload files if connection is made
       have the connection request be on conditional
 - [ ] update send the file update to server when client is connected
-- [ ] make the ping/pong for the server to client connection to check live
+- [x] make the ping/pong or the server to client connection to check live
+
+- [ ] setup bi directional streaming for session handling
+
+  - [ ] the server should be able to send files to the clients
+
+- [ ] download files from the server and place in the correct location for the client
 
 ### Bonus
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -18,38 +19,94 @@ import (
 
 type FileTransferServer struct {
 	filetransferconnect.UnimplementedFileServiceHandler
+	sessions map[string]*sessionState
+	mu       sync.RWMutex
+	db       *mongo.Client
 }
 
-type server struct {
-	transferserver FileTransferServer
-	mongoclient    *mongo.Client
+type sessionState struct {
+	controlStream *connect.BidiStream[ft.ControlMessage, ft.ControlMessage]
+	isPaused      bool
 }
 
-func ConnectMongo() (*mongo.Client, context.Context) {
-	// Set client options
-	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
-	// Connect to MongoDB
-	client, err := mongo.Connect(context.Background(), clientOptions)
-	if err != nil {
-		log.Fatal(err)
+func NewFileTransferServer(db *mongo.Client) *FileTransferServer {
+	return &FileTransferServer{
+		sessions: make(map[string]*sessionState),
+		db:       db,
 	}
-	// Check the connection
-	// The connection context only lasts as long as specified in the timemout, since
-	// We are running these commands not on a time frame we should be able to use contex.TODO although that is likely
-	// not best practice
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err = client.Ping(ctx, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("Connected to MongoDB!")
-	return client, ctx
 }
 
-// TODO: write the file to mongodb saving
-// first step is to try and locate the file using a get method from mongodb then create a new version if found, else create the file and then version
+func (s *FileTransferServer) ControlStream(
+	ctx context.Context,
+	stream *connect.BidiStream[ft.ControlMessage, ft.ControlMessage],
+) error {
+	// First message should contain session initialization
+	msg, err := stream.Receive()
+	if err != nil {
+		return err
+	}
 
+	sessionID := msg.SessionId
+	s.mu.Lock()
+	s.sessions[sessionID] = &sessionState{
+		controlStream: stream,
+		isPaused:      false,
+	}
+	s.mu.Unlock()
+
+	// Send acknowledgment
+	if err := stream.Send(&ft.ControlMessage{
+		SessionId: sessionID,
+		Type:      ft.ControlMessage_READY,
+	}); err != nil {
+		return err
+	}
+
+	// Handle session cleanup
+	defer func() {
+		s.mu.Lock()
+		delete(s.sessions, sessionID)
+		s.mu.Unlock()
+	}()
+
+	// Handle incoming control messages
+	for {
+		msg, err := stream.Receive()
+		if err != nil {
+			return err
+		}
+
+		switch msg.Type {
+		case ft.ControlMessage_READY:
+			log.Printf("Client %s ready for transfer", sessionID)
+		case ft.ControlMessage_START_TRANSFER:
+			log.Printf("Starting transfer for client %s: %s", sessionID, msg.Filename)
+		case ft.ControlMessage_PAUSE:
+			s.setPauseState(sessionID, true)
+		case ft.ControlMessage_RESUME:
+			s.setPauseState(sessionID, false)
+		}
+	}
+}
+
+func (s *FileTransferServer) setPauseState(sessionID string, isPaused bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if session, exists := s.sessions[sessionID]; exists {
+		session.isPaused = isPaused
+	}
+}
+
+func (s *FileTransferServer) isSessionPaused(sessionID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if session, exists := s.sessions[sessionID]; exists {
+		return session.isPaused
+	}
+	return false
+}
+
+// Existing methods remain unchanged
 func (s *FileTransferServer) SendFileToServer(ctx context.Context, stream *connect.ClientStream[ft.FileData]) (*connect.Response[ft.ActionResponse], error) {
 	success := true
 	message := "OK"
@@ -75,17 +132,49 @@ func (s *FileTransferServer) ValidateServer(ctx context.Context, req *connect.Re
 	}), nil
 }
 
-// func (s *FileTransferServer) SendFileToClient(ctx context.Context, stream *connect.Request[ft.FileRequest]) *connect.ServerStream[ft.FileData] {
-// 	return nil
-// }
+func ConnectMongo() (*mongo.Client, context.Context) {
+	// Set client options
+	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	// Connect to MongoDB
+	client, err := mongo.Connect(context.Background(), clientOptions)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Check the connection
+	// The connection context only lasts as long as specified in the timemout, since
+	// We are running these commands not on a time frame we should be able to use contex.TODO although that is likely
+	// not best practice
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err = client.Ping(ctx, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Connected to MongoDB!")
+	return client, ctx
+}
 
 func main() {
-	filetransfer := &FileTransferServer{}
+	mongoClient, _ := ConnectMongo()
+	filetransfer := NewFileTransferServer(mongoClient)
+
 	mux := http.NewServeMux()
 	path, handler := filetransferconnect.NewFileServiceHandler(filetransfer)
 	mux.Handle(path, handler)
+
+	server := &http.Server{
+		Addr: "localhost:50051",
+		Handler: h2c.NewHandler(mux, &http2.Server{
+			MaxConcurrentStreams: 250,
+			MaxReadFrameSize:     16384,
+			IdleTimeout:          10 * time.Second,
+		}),
+	}
+
 	log.Println("Server started on port 50051")
-	http.ListenAndServe("localhost:50051", h2c.NewHandler(mux, &http2.Server{}))
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }
 
 type WatcherServer struct {
