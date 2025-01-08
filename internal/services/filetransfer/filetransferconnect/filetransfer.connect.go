@@ -33,6 +33,12 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// FileServiceControlStreamProcedure is the fully-qualified name of the FileService's ControlStream
+	// RPC.
+	FileServiceControlStreamProcedure = "/filetransfer.FileService/ControlStream"
+	// FileServiceTransferFileProcedure is the fully-qualified name of the FileService's TransferFile
+	// RPC.
+	FileServiceTransferFileProcedure = "/filetransfer.FileService/TransferFile"
 	// FileServiceSendFileToServerProcedure is the fully-qualified name of the FileService's
 	// SendFileToServer RPC.
 	FileServiceSendFileToServerProcedure = "/filetransfer.FileService/SendFileToServer"
@@ -44,6 +50,8 @@ const (
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
 	fileServiceServiceDescriptor                = filetransfer.File_filetransfer_filetransfer_proto.Services().ByName("FileService")
+	fileServiceControlStreamMethodDescriptor    = fileServiceServiceDescriptor.Methods().ByName("ControlStream")
+	fileServiceTransferFileMethodDescriptor     = fileServiceServiceDescriptor.Methods().ByName("TransferFile")
 	fileServiceSendFileToServerMethodDescriptor = fileServiceServiceDescriptor.Methods().ByName("SendFileToServer")
 	fileServiceValidateServerMethodDescriptor   = fileServiceServiceDescriptor.Methods().ByName("ValidateServer")
 )
@@ -52,6 +60,8 @@ var (
 type FileServiceClient interface {
 	// rpc StreamFileChanges(stream FileChange) returns (stream FileChange) {}; // Bidirectional streaming for file changes
 	// rpc SendFileToClient(FileRequest) returns (stream FileData) {};
+	ControlStream(context.Context) *connect.BidiStreamForClient[filetransfer.ControlMessage, filetransfer.ControlMessage]
+	TransferFile(context.Context, *connect.Request[filetransfer.FileTransferRequest]) (*connect.ServerStreamForClient[filetransfer.FileChunk], error)
 	SendFileToServer(context.Context) *connect.ClientStreamForClient[filetransfer.FileData, filetransfer.ActionResponse]
 	ValidateServer(context.Context, *connect.Request[filetransfer.ActionResponse]) (*connect.Response[filetransfer.ActionResponse], error)
 }
@@ -66,6 +76,18 @@ type FileServiceClient interface {
 func NewFileServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) FileServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
 	return &fileServiceClient{
+		controlStream: connect.NewClient[filetransfer.ControlMessage, filetransfer.ControlMessage](
+			httpClient,
+			baseURL+FileServiceControlStreamProcedure,
+			connect.WithSchema(fileServiceControlStreamMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		transferFile: connect.NewClient[filetransfer.FileTransferRequest, filetransfer.FileChunk](
+			httpClient,
+			baseURL+FileServiceTransferFileProcedure,
+			connect.WithSchema(fileServiceTransferFileMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		sendFileToServer: connect.NewClient[filetransfer.FileData, filetransfer.ActionResponse](
 			httpClient,
 			baseURL+FileServiceSendFileToServerProcedure,
@@ -83,8 +105,20 @@ func NewFileServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // fileServiceClient implements FileServiceClient.
 type fileServiceClient struct {
+	controlStream    *connect.Client[filetransfer.ControlMessage, filetransfer.ControlMessage]
+	transferFile     *connect.Client[filetransfer.FileTransferRequest, filetransfer.FileChunk]
 	sendFileToServer *connect.Client[filetransfer.FileData, filetransfer.ActionResponse]
 	validateServer   *connect.Client[filetransfer.ActionResponse, filetransfer.ActionResponse]
+}
+
+// ControlStream calls filetransfer.FileService.ControlStream.
+func (c *fileServiceClient) ControlStream(ctx context.Context) *connect.BidiStreamForClient[filetransfer.ControlMessage, filetransfer.ControlMessage] {
+	return c.controlStream.CallBidiStream(ctx)
+}
+
+// TransferFile calls filetransfer.FileService.TransferFile.
+func (c *fileServiceClient) TransferFile(ctx context.Context, req *connect.Request[filetransfer.FileTransferRequest]) (*connect.ServerStreamForClient[filetransfer.FileChunk], error) {
+	return c.transferFile.CallServerStream(ctx, req)
 }
 
 // SendFileToServer calls filetransfer.FileService.SendFileToServer.
@@ -101,6 +135,8 @@ func (c *fileServiceClient) ValidateServer(ctx context.Context, req *connect.Req
 type FileServiceHandler interface {
 	// rpc StreamFileChanges(stream FileChange) returns (stream FileChange) {}; // Bidirectional streaming for file changes
 	// rpc SendFileToClient(FileRequest) returns (stream FileData) {};
+	ControlStream(context.Context, *connect.BidiStream[filetransfer.ControlMessage, filetransfer.ControlMessage]) error
+	TransferFile(context.Context, *connect.Request[filetransfer.FileTransferRequest], *connect.ServerStream[filetransfer.FileChunk]) error
 	SendFileToServer(context.Context, *connect.ClientStream[filetransfer.FileData]) (*connect.Response[filetransfer.ActionResponse], error)
 	ValidateServer(context.Context, *connect.Request[filetransfer.ActionResponse]) (*connect.Response[filetransfer.ActionResponse], error)
 }
@@ -111,6 +147,18 @@ type FileServiceHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewFileServiceHandler(svc FileServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	fileServiceControlStreamHandler := connect.NewBidiStreamHandler(
+		FileServiceControlStreamProcedure,
+		svc.ControlStream,
+		connect.WithSchema(fileServiceControlStreamMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	fileServiceTransferFileHandler := connect.NewServerStreamHandler(
+		FileServiceTransferFileProcedure,
+		svc.TransferFile,
+		connect.WithSchema(fileServiceTransferFileMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	fileServiceSendFileToServerHandler := connect.NewClientStreamHandler(
 		FileServiceSendFileToServerProcedure,
 		svc.SendFileToServer,
@@ -125,6 +173,10 @@ func NewFileServiceHandler(svc FileServiceHandler, opts ...connect.HandlerOption
 	)
 	return "/filetransfer.FileService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case FileServiceControlStreamProcedure:
+			fileServiceControlStreamHandler.ServeHTTP(w, r)
+		case FileServiceTransferFileProcedure:
+			fileServiceTransferFileHandler.ServeHTTP(w, r)
 		case FileServiceSendFileToServerProcedure:
 			fileServiceSendFileToServerHandler.ServeHTTP(w, r)
 		case FileServiceValidateServerProcedure:
@@ -137,6 +189,14 @@ func NewFileServiceHandler(svc FileServiceHandler, opts ...connect.HandlerOption
 
 // UnimplementedFileServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedFileServiceHandler struct{}
+
+func (UnimplementedFileServiceHandler) ControlStream(context.Context, *connect.BidiStream[filetransfer.ControlMessage, filetransfer.ControlMessage]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("filetransfer.FileService.ControlStream is not implemented"))
+}
+
+func (UnimplementedFileServiceHandler) TransferFile(context.Context, *connect.Request[filetransfer.FileTransferRequest], *connect.ServerStream[filetransfer.FileChunk]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("filetransfer.FileService.TransferFile is not implemented"))
+}
 
 func (UnimplementedFileServiceHandler) SendFileToServer(context.Context, *connect.ClientStream[filetransfer.FileData]) (*connect.Response[filetransfer.ActionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("filetransfer.FileService.SendFileToServer is not implemented"))

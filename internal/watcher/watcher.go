@@ -2,31 +2,40 @@ package watcher
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	// "strings"
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/fsnotify/fsnotify"
-	"github.com/itsrobel/sync/internal/services/filetransfer"
+	ft "github.com/itsrobel/sync/internal/services/filetransfer"
 	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
 	"github.com/itsrobel/sync/internal/sql_manager"
 	"github.com/itsrobel/sync/internal/types"
+	"golang.org/x/net/http2"
 )
 
-// TODO: I need to isolate and refactor this file to abract out the FileServiceClient
 type FileWatcher struct {
-	watcher *fsnotify.Watcher
-	db      *sql.DB
-	wait    sync.WaitGroup
-	monitor *ServerMonitor
-	done    chan struct{}
+	watcher       *fsnotify.Watcher
+	db            *sql.DB
+	wait          sync.WaitGroup
+	done          chan struct{}
+	client        filetransferconnect.FileServiceClient
+	sessionID     string
+	controlStream *connect.BidiStreamForClient[ft.ControlMessage, ft.ControlMessage]
+	isConnected   bool
+	mu            sync.RWMutex
 }
 
 func InitFileWatcher(dbPath, watchPath string) (*FileWatcher, error) {
@@ -34,85 +43,266 @@ func InitFileWatcher(dbPath, watchPath string) (*FileWatcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
+
 	db, err := sql_manager.ConnectSQLite(dbPath)
 	if err != nil {
 		watcher.Close()
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	client := filetransferconnect.NewFileServiceClient(http.DefaultClient, "http://localhost:50051")
-
-	monitor := NewServerMonitor(client, 10*time.Second)
-
+	client := filetransferconnect.NewFileServiceClient(
+		&http.Client{
+			Transport: &http2.Transport{
+				AllowHTTP: true,
+				DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+					return net.Dial(network, addr)
+				},
+			},
+		},
+		"http://localhost:50051",
+	)
 	fw := &FileWatcher{
 		watcher: watcher,
 		db:      db,
-		monitor: monitor,
+		// client:    filetransferconnect.NewFileServiceClient(http.DefaultClient, "http://localhost:50051"),
+		client:    client,
+		sessionID: fmt.Sprintf("session_%d", time.Now().UnixNano()),
+		done:      make(chan struct{}),
 	}
 
-	monitor.Start()
-	// if monitor.IsConnected() {
-	// 	log.Println("Server is connected")
-	// } else {
-	// 	log.Println("Server not connected")
-	// }
+	// Start the connection ticker
+	go fw.connectionTicker()
 
-	err = filepath.Walk("./content",
-		func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if path != "./content" {
-				fmt.Println(path, info.Size())
-				// NOTE: since I am not doning any comparison
-				// operations I am just going to create a new
-				// version of every file as the default behavior
-				// update later to be a cooler function
-				isFile, _ := sql_manager.FindFileByLocation(fw.db, path)
-				// log.Println(isFile.ID, isFile.Location, isFile.Contents)
-				var file_id string
-				if isFile == nil {
-					log.Printf("Create new file at: %s", path)
-					file_id, _ = sql_manager.CreateFile(fw.db, path)
-				} else {
-					file_id = isFile.ID
-				}
-				log.Printf("File exists at: %s", path)
-				file, err := os.Open(path) // Note: using event.Name instead of "filename.txt"
-				if err != nil {
-					return fmt.Errorf("failed to open file: %w", err)
-				}
-				defer file.Close()
-				var content strings.Builder
-				buf := make([]byte, 8192) // Using 8KB buffer size
-				for {
-					n, err := file.Read(buf)
-					if err == io.EOF {
-						break
-					}
-					if err != nil {
-						return fmt.Errorf("failed to read file: %w", err)
-					}
-					content.Write(buf[:n])
-				}
-				if err := sql_manager.CreateFileVersion(fw.db, file_id, content.String()); err != nil {
-					return fmt.Errorf("failed to create file version: %w", err)
-				}
-				fw.file_upload(path)
-
-			}
-			return nil
-		})
-	if err != nil {
-		log.Fatal(err)
+	// Process initial files regardless of connection status
+	if err := fw.processInitialFiles(); err != nil {
+		return nil, err
 	}
+
 	if err := fw.startWatching(watchPath); err != nil {
-		watcher.Close()
-		db.Close()
 		return nil, err
 	}
 
 	return fw, nil
+}
+
+func (fw *FileWatcher) connectionTicker() {
+	if err := fw.attemptConnection(); err != nil {
+		log.Printf("Failed to connect to server: %v", err)
+	}
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if !fw.IsConnected() {
+				if err := fw.attemptConnection(); err != nil {
+					log.Printf("Failed to connect to server: %v", err)
+				}
+			}
+		case <-fw.done:
+			return
+		}
+	}
+}
+
+func (fw *FileWatcher) attemptConnection() error {
+	fw.mu.Lock()
+	if fw.controlStream != nil {
+		fw.controlStream = nil
+	}
+	fw.mu.Unlock()
+
+	stream := fw.client.ControlStream(context.Background())
+
+	fw.mu.Lock()
+	fw.controlStream = stream
+	fw.mu.Unlock()
+
+	if err := stream.Send(&ft.ControlMessage{
+		SessionId: fw.sessionID,
+		Type:      ft.ControlMessage_READY,
+	}); err != nil {
+		fw.setConnected(false)
+		return fmt.Errorf("failed to send initial message")
+	}
+
+	go fw.handleControlStream()
+	return nil
+}
+
+func (fw *FileWatcher) handleControlStream() {
+	defer func() {
+		fw.mu.Lock()
+		fw.controlStream = nil
+		fw.mu.Unlock()
+		fw.setConnected(false)
+	}()
+
+	for {
+		msg, err := fw.controlStream.Receive()
+		if err != nil {
+			fw.setConnected(false)
+			log.Printf("Control stream error: %v", err)
+			return
+		}
+
+		switch msg.Type {
+		case ft.ControlMessage_READY:
+			fw.setConnected(true)
+			log.Printf("Server connection established for session: %s", fw.sessionID)
+		case ft.ControlMessage_NEW_FILE_AVAILABLE:
+			log.Printf("New file available on server: %s", msg.Filename)
+		}
+	}
+}
+
+func (fw *FileWatcher) startControlStream() error {
+	stream := fw.client.ControlStream(context.Background())
+
+	fw.mu.Lock()
+	fw.controlStream = stream
+	fw.mu.Unlock()
+
+	if err := stream.Send(&ft.ControlMessage{
+		SessionId: fw.sessionID,
+		Type:      ft.ControlMessage_READY,
+	}); err != nil {
+		return fmt.Errorf("failed to send initial message: %w", err)
+	}
+
+	go fw.handleControlStream()
+	return nil
+}
+
+func (fw *FileWatcher) file_upload(file_path string) error {
+	if err := fw.sendControlMessage(&ft.ControlMessage{
+		SessionId: fw.sessionID,
+		Type:      ft.ControlMessage_START_TRANSFER,
+		Filename:  filepath.Base(file_path),
+	}); err != nil {
+		return err
+	}
+
+	file, err := os.Open(file_path)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	stream := fw.client.SendFileToServer(context.Background())
+	buffer := make([]byte, types.ChunkSize)
+
+	for {
+		n, err := file.Read(buffer)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("error reading file: %v", err)
+		}
+
+		if err := stream.Send(&ft.FileData{
+			Id:       fw.sessionID,
+			Location: filepath.Base(file_path),
+			Content:  buffer[:n],
+			Offset:   int64(n),
+		}); err != nil {
+			return fmt.Errorf("error sending file data: %v", err)
+		}
+	}
+
+	res, err := stream.CloseAndReceive()
+	if err != nil {
+		return fmt.Errorf("error closing stream: %v", err)
+	}
+
+	log.Printf("Upload completed: %v", res)
+	return nil
+}
+
+func (fw *FileWatcher) sendControlMessage(msg *ft.ControlMessage) error {
+	fw.mu.RLock()
+	defer fw.mu.RUnlock()
+
+	if fw.controlStream == nil {
+		return fmt.Errorf("control stream not initialized")
+	}
+	return fw.controlStream.Send(msg)
+}
+
+func (fw *FileWatcher) setConnected(status bool) {
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	fw.isConnected = status
+}
+
+func (fw *FileWatcher) IsConnected() bool {
+	fw.mu.RLock()
+	defer fw.mu.RUnlock()
+	return fw.isConnected
+}
+
+func (fw *FileWatcher) processInitialFiles() error {
+	return filepath.Walk("./content", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if path != "./content" {
+			isFile, _ := sql_manager.FindFileByLocation(fw.db, path)
+			var fileID string
+
+			if isFile == nil {
+				var err error
+				fileID, err = sql_manager.CreateFile(fw.db, path)
+				if err != nil {
+					return fmt.Errorf("failed to create file record: %w", err)
+				}
+				log.Printf("Created new file record: %s", path)
+			} else {
+				fileID = isFile.ID
+			}
+
+			if err := fw.processFileContent(path, fileID); err != nil {
+				return err
+			}
+
+			if fw.IsConnected() {
+				if err := fw.file_upload(path); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
+
+func (fw *FileWatcher) processFileContent(path, fileID string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	var content strings.Builder
+	buffer := make([]byte, 8192)
+
+	for {
+		n, err := file.Read(buffer)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read file: %w", err)
+		}
+		content.Write(buffer[:n])
+	}
+
+	if err := sql_manager.CreateFileVersion(fw.db, fileID, content.String()); err != nil {
+		return fmt.Errorf("failed to create file version: %w", err)
+	}
+
+	return nil
 }
 
 func (fw *FileWatcher) startWatching(path string) error {
@@ -120,9 +310,7 @@ func (fw *FileWatcher) startWatching(path string) error {
 		return fmt.Errorf("failed to add path to watcher: %w", err)
 	}
 
-	fw.done = make(chan struct{})
 	fw.wait.Add(1)
-
 	go func() {
 		defer fw.wait.Done()
 		for {
@@ -145,115 +333,50 @@ func (fw *FileWatcher) startWatching(path string) error {
 		}
 	}()
 
-	fmt.Printf("Watching directory: %s\n", path)
-	// Block until done channel is closed
-	<-fw.done
+	log.Printf("Started watching directory: %s", path)
 	return nil
 }
 
 func (fw *FileWatcher) handleEvent(event fsnotify.Event) error {
-	// log.Printf("File Event: %s, File Location %s", event.Op, event.Name)
-	// TODO: fix the triggered create event
-	if event.Op&fsnotify.Create == fsnotify.Create && sql_manager.ValidFileExtension(event.Name) {
-		log.Printf("New file create Event: %s", event.Name)
+	if !sql_manager.ValidFileExtension(event.Name) {
+		return nil
+	}
+
+	switch {
+	case event.Op&fsnotify.Create == fsnotify.Create:
 		isFile, _ := sql_manager.FindFileByLocation(fw.db, event.Name)
-		// var fileID string
 		if isFile == nil {
-			log.Printf("Create new file at: %s", event.Name)
-			sql_manager.CreateFile(fw.db, event.Name)
-			// if err != nil {
-			// 	return fmt.Errorf("failed to create file record: %w", err)
-			// }
-		} else {
-			log.Printf("File exists at: %s", event.Name)
-		}
-
-	}
-	if event.Op&fsnotify.Write == fsnotify.Write && sql_manager.ValidFileExtension(event.Name) {
-
-		isFile, _ := sql_manager.FindFileByLocation(fw.db, event.Name)
-		file, err := os.Open(event.Name) // Note: using event.Name instead of "filename.txt"
-		if err != nil {
-			return fmt.Errorf("failed to open file: %w", err)
-		}
-		defer file.Close()
-
-		var content strings.Builder
-		buf := make([]byte, 8192) // Using 8KB buffer size
-		for {
-			n, err := file.Read(buf)
-			if err == io.EOF {
-				break
-			}
+			fileID, err := sql_manager.CreateFile(fw.db, event.Name)
 			if err != nil {
-				return fmt.Errorf("failed to read file: %w", err)
+				return fmt.Errorf("failed to create file record: %w", err)
 			}
-			content.Write(buf[:n])
+			log.Printf("Created new file: %s", event.Name)
+			return fw.processFileContent(event.Name, fileID)
 		}
 
-		if err := sql_manager.CreateFileVersion(fw.db, isFile.ID, content.String()); err != nil {
-			return fmt.Errorf("failed to create file version: %w", err)
+	case event.Op&fsnotify.Write == fsnotify.Write:
+		isFile, _ := sql_manager.FindFileByLocation(fw.db, event.Name)
+		if isFile == nil {
+			return fmt.Errorf("file not found in database: %s", event.Name)
 		}
+		if err := fw.processFileContent(event.Name, isFile.ID); err != nil {
+			return err
+		}
+		return fw.file_upload(event.Name)
 	}
+
 	return nil
-}
-
-func (fw *FileWatcher) file_upload(file_path string) {
-	if fw.monitor.IsConnected() {
-
-		file, openErr := os.Open(file_path)
-		id := 1
-		if openErr != nil {
-			log.Fatalf("Failed to open local file: %v", openErr)
-			return
-		}
-		defer file.Close()
-		buf := make([]byte, types.ChunkSize) // Define your buffer size
-
-		// client := filetransferconnect.NewFileServiceClient(http.DefaultClient, "http://localhost:50051")
-
-		// we will be transfering over fileversions mostly
-		stream := fw.monitor.client.SendFileToServer(context.Background())
-		for {
-			log.Printf("Trying to upload...")
-			n, readErr := file.Read(buf) // Read from file into buffer
-
-			if n > 0 { // Only send if there's data to send
-				fileData := &filetransfer.FileData{
-					Id:       fmt.Sprintf("%d", id),
-					Location: filepath.Base(file_path), // Use actual filename here
-					Content:  buf[:n],                  // Send only n bytes
-					Offset:   int64(n),
-					// TotalSize: int64,
-				}
-
-				if err := stream.Send(fileData); err != nil {
-					log.Printf("Client %d error sending file data: %v\n", id, err)
-					return
-				}
-				log.Printf("Sent %d bytes", n)
-				res, _ := stream.CloseAndReceive()
-				log.Printf("Server response: %v", res)
-			}
-
-			if readErr == io.EOF {
-				log.Println("Reached end of file")
-				break
-			}
-
-			if readErr != nil {
-				log.Fatalf("Error reading local file: %v", readErr)
-				return
-			}
-		}
-	} else {
-		log.Println("cannot upload file, not connected to server")
-	}
 }
 
 func (fw *FileWatcher) Stop() {
 	if fw.done != nil {
 		close(fw.done)
 		fw.wait.Wait()
+	}
+	if fw.watcher != nil {
+		fw.watcher.Close()
+	}
+	if fw.db != nil {
+		fw.db.Close()
 	}
 }

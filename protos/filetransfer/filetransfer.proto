@@ -6,8 +6,11 @@ option go_package = "github.com/itsrobel/sync/internal/services/filetransfer";
 service FileService {
   //rpc StreamFileChanges(stream FileChange) returns (stream FileChange) {}; // Bidirectional streaming for file changes
   //rpc SendFileToClient(FileRequest) returns (stream FileData) {};
+  rpc ControlStream(stream ControlMessage) returns (stream ControlMessage) {};
+  rpc TransferFile(FileTransferRequest) returns (stream FileChunk) {};
   rpc SendFileToServer(stream FileData) returns (ActionResponse) {};
   rpc ValidateServer(ActionResponse) returns  (ActionResponse) {};
+
   //rpc DeleteFile(FileRequest) returns (ActionResponse);
   //rpc MoveFile(MoveFileRequest) returns (ActionResponse);
 }
@@ -25,6 +28,32 @@ message FileData {
   int64 offset = 4;     // Offset for streaming
   int64 total_size = 5; // Total size of the file
 }
+
+message FileTransferRequest {
+    string session_id = 1;
+    string filename = 2;
+}
+
+message ControlMessage {
+    string session_id = 1;
+    ControlType type = 2;
+    string filename = 3;
+    
+    enum ControlType {
+        UNKNOWN = 0;
+        READY = 1;
+        START_TRANSFER = 2;
+        PAUSE = 3;
+        RESUME = 4;
+        NEW_FILE_AVAILABLE = 5;
+    }
+}
+
+message FileChunk {
+    bytes content = 1;
+    string filename = 2;
+}
+
 
 message FileChange {
   string content = 1;   // File content
