@@ -190,9 +190,17 @@ the contents and the ID from the sql table
 
 - [ ] setup bi directional streaming for session handling
 
-  - [ ] the server should be able to send files to the clients
+  - [ ] the default behavior for the control stream is to constantly re check if the server is live
+        since part of that logic is sending down updated files we do not have to make another controller for the file downloads
+        and instead can send them as a return stream response
+        this then makes almost all my rpc requests a bi directional stream
 
-- [ ] download files from the server and place in the correct location for the client
+        client connects to server -> server sends down updated files from mongodb
+        client uploads files -> server saves it
+
+  - [x] I need the server to to be able to upload files to the server on start
+  - [ ] each client is given a session id, but I think giving them a self assigned name would be better, to track what files, they don't have
+        based on when they lasted connected via timestamps
 
 ### Bonus
 

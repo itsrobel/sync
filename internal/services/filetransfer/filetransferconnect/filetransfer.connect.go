@@ -47,15 +47,6 @@ const (
 	FileServiceValidateServerProcedure = "/filetransfer.FileService/ValidateServer"
 )
 
-// These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
-var (
-	fileServiceServiceDescriptor                = filetransfer.File_filetransfer_filetransfer_proto.Services().ByName("FileService")
-	fileServiceControlStreamMethodDescriptor    = fileServiceServiceDescriptor.Methods().ByName("ControlStream")
-	fileServiceTransferFileMethodDescriptor     = fileServiceServiceDescriptor.Methods().ByName("TransferFile")
-	fileServiceSendFileToServerMethodDescriptor = fileServiceServiceDescriptor.Methods().ByName("SendFileToServer")
-	fileServiceValidateServerMethodDescriptor   = fileServiceServiceDescriptor.Methods().ByName("ValidateServer")
-)
-
 // FileServiceClient is a client for the filetransfer.FileService service.
 type FileServiceClient interface {
 	// rpc StreamFileChanges(stream FileChange) returns (stream FileChange) {}; // Bidirectional streaming for file changes
@@ -75,29 +66,30 @@ type FileServiceClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewFileServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) FileServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	fileServiceMethods := filetransfer.File_filetransfer_filetransfer_proto.Services().ByName("FileService").Methods()
 	return &fileServiceClient{
 		controlStream: connect.NewClient[filetransfer.ControlMessage, filetransfer.ControlMessage](
 			httpClient,
 			baseURL+FileServiceControlStreamProcedure,
-			connect.WithSchema(fileServiceControlStreamMethodDescriptor),
+			connect.WithSchema(fileServiceMethods.ByName("ControlStream")),
 			connect.WithClientOptions(opts...),
 		),
 		transferFile: connect.NewClient[filetransfer.FileTransferRequest, filetransfer.FileChunk](
 			httpClient,
 			baseURL+FileServiceTransferFileProcedure,
-			connect.WithSchema(fileServiceTransferFileMethodDescriptor),
+			connect.WithSchema(fileServiceMethods.ByName("TransferFile")),
 			connect.WithClientOptions(opts...),
 		),
 		sendFileToServer: connect.NewClient[filetransfer.FileData, filetransfer.ActionResponse](
 			httpClient,
 			baseURL+FileServiceSendFileToServerProcedure,
-			connect.WithSchema(fileServiceSendFileToServerMethodDescriptor),
+			connect.WithSchema(fileServiceMethods.ByName("SendFileToServer")),
 			connect.WithClientOptions(opts...),
 		),
 		validateServer: connect.NewClient[filetransfer.ActionResponse, filetransfer.ActionResponse](
 			httpClient,
 			baseURL+FileServiceValidateServerProcedure,
-			connect.WithSchema(fileServiceValidateServerMethodDescriptor),
+			connect.WithSchema(fileServiceMethods.ByName("ValidateServer")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -147,28 +139,29 @@ type FileServiceHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewFileServiceHandler(svc FileServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	fileServiceMethods := filetransfer.File_filetransfer_filetransfer_proto.Services().ByName("FileService").Methods()
 	fileServiceControlStreamHandler := connect.NewBidiStreamHandler(
 		FileServiceControlStreamProcedure,
 		svc.ControlStream,
-		connect.WithSchema(fileServiceControlStreamMethodDescriptor),
+		connect.WithSchema(fileServiceMethods.ByName("ControlStream")),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileServiceTransferFileHandler := connect.NewServerStreamHandler(
 		FileServiceTransferFileProcedure,
 		svc.TransferFile,
-		connect.WithSchema(fileServiceTransferFileMethodDescriptor),
+		connect.WithSchema(fileServiceMethods.ByName("TransferFile")),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileServiceSendFileToServerHandler := connect.NewClientStreamHandler(
 		FileServiceSendFileToServerProcedure,
 		svc.SendFileToServer,
-		connect.WithSchema(fileServiceSendFileToServerMethodDescriptor),
+		connect.WithSchema(fileServiceMethods.ByName("SendFileToServer")),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileServiceValidateServerHandler := connect.NewUnaryHandler(
 		FileServiceValidateServerProcedure,
 		svc.ValidateServer,
-		connect.WithSchema(fileServiceValidateServerMethodDescriptor),
+		connect.WithSchema(fileServiceMethods.ByName("ValidateServer")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/filetransfer.FileService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
