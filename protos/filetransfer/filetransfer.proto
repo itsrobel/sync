@@ -34,6 +34,12 @@ message FileTransferRequest {
     string filename = 2;
 }
 
+
+//NOTE: control messages are between the client and server
+//sort of like boardcasting in sockets
+// The following are the list of messages we need
+// -> inital
+// -> NEW_FILE, we need this in order to notify clients of a new file, or file change
 message ControlMessage {
     string session_id = 1;
     ControlType type = 2;
@@ -42,10 +48,10 @@ message ControlMessage {
     enum ControlType {
         UNKNOWN = 0;
         READY = 1;
-        START_TRANSFER = 2;
+        NEW_FILE = 2;
         PAUSE = 3;
         RESUME = 4;
-        NEW_FILE_AVAILABLE = 5;
+        START_TRANSFER = 5;
     }
 }
 

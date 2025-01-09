@@ -11,6 +11,8 @@ import (
 	"connectrpc.com/connect"
 	ft "github.com/itsrobel/sync/internal/services/filetransfer"
 	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
+	ct "github.com/itsrobel/sync/internal/types"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/net/http2"
@@ -36,58 +38,58 @@ func NewFileTransferServer(db *mongo.Client) *FileTransferServer {
 	}
 }
 
-func (s *FileTransferServer) ControlStream(
-	ctx context.Context,
-	stream *connect.BidiStream[ft.ControlMessage, ft.ControlMessage],
-) error {
-	// First message should contain session initialization
-	msg, err := stream.Receive()
-	if err != nil {
-		return err
-	}
-
-	sessionID := msg.SessionId
-	s.mu.Lock()
-	s.sessions[sessionID] = &sessionState{
-		controlStream: stream,
-		isPaused:      false,
-	}
-	s.mu.Unlock()
-
-	// Send acknowledgment
-	if err := stream.Send(&ft.ControlMessage{
-		SessionId: sessionID,
-		Type:      ft.ControlMessage_READY,
-	}); err != nil {
-		return err
-	}
-
-	// Handle session cleanup
-	defer func() {
-		s.mu.Lock()
-		delete(s.sessions, sessionID)
-		s.mu.Unlock()
-	}()
-
-	// Handle incoming control messages
-	for {
-		msg, err := stream.Receive()
-		if err != nil {
-			return err
-		}
-
-		switch msg.Type {
-		case ft.ControlMessage_READY:
-			log.Printf("Client %s ready for transfer", sessionID)
-		case ft.ControlMessage_START_TRANSFER:
-			log.Printf("Starting transfer for client %s: %s", sessionID, msg.Filename)
-		case ft.ControlMessage_PAUSE:
-			s.setPauseState(sessionID, true)
-		case ft.ControlMessage_RESUME:
-			s.setPauseState(sessionID, false)
-		}
-	}
-}
+// func (s *FileTransferServer) ControlStream(
+// 	ctx context.Context,
+// 	stream *connect.BidiStream[ft.ControlMessage, ft.ControlMessage],
+// ) error {
+// 	// First message should contain session initialization
+// 	msg, err := stream.Receive()
+// 	if err != nil {
+// 		return err
+// 	}
+//
+// 	sessionID := msg.SessionId
+// 	s.mu.Lock()
+// 	s.sessions[sessionID] = &sessionState{
+// 		controlStream: stream,
+// 		isPaused:      false,
+// 	}
+// 	s.mu.Unlock()
+//
+// 	// Send acknowledgment
+// 	if err := stream.Send(&ft.ControlMessage{
+// 		SessionId: sessionID,
+// 		Type:      ft.ControlMessage_READY,
+// 	}); err != nil {
+// 		return err
+// 	}
+//
+// 	// Handle session cleanup
+// 	defer func() {
+// 		s.mu.Lock()
+// 		delete(s.sessions, sessionID)
+// 		s.mu.Unlock()
+// 	}()
+//
+// 	// Handle incoming control messages
+// 	for {
+// 		msg, err := stream.Receive()
+// 		if err != nil {
+// 			return err
+// 		}
+//
+// 		switch msg.Type {
+// 		case ft.ControlMessage_READY:
+// 			log.Printf("Client %s ready for transfer", sessionID)
+// 		case ft.ControlMessage_START_TRANSFER:
+// 			log.Printf("Starting transfer for client %s: %s", sessionID, msg.Filename)
+// 		case ft.ControlMessage_PAUSE:
+// 			s.setPauseState(sessionID, true)
+// 		case ft.ControlMessage_RESUME:
+// 			s.setPauseState(sessionID, false)
+// 		}
+// 	}
+// }
 
 func (s *FileTransferServer) setPauseState(sessionID string, isPaused bool) {
 	s.mu.Lock()
@@ -122,6 +124,7 @@ func (s *FileTransferServer) SendFileToServer(ctx context.Context, stream *conne
 	}
 	res := connect.NewResponse(&ft.ActionResponse{Success: success, Message: message})
 	res.Header().Set("Transfer-Version", "v1")
+
 	return res, nil
 }
 
@@ -177,31 +180,93 @@ func main() {
 	}
 }
 
-type WatcherServer struct {
-	grpcServer FileTransferServer
-	watcher    *watcher.FileWatcher
-}
-
-func (c *WatcherServer) HandleChange(path string, eventType string) error {
-	// Send gRPC notification to server
-	// _, err := c.grpcClient.NotifyFileChange(context.Background(), &FileChangeRequest{
-	//     Path:      path,
-	//     EventType: eventType,
-	// })
-	// return err
-	return nil
-}
-
-func NewWatcherServer(grpcServer FileTransferServer) *WatcherServer {
-	watcher, _ := watcher.NewFileWatcher()
-	server := &WatcherServer{
-		grpcServer: grpcServer,
-		watcher:    watcher,
+func (s *FileTransferServer) updateClientTimestamp(sessionID string) error {
+	collection := s.db.Database("sync").Collection("client_sessions")
+	filter := bson.M{"session_id": sessionID}
+	update := bson.M{
+		"$set": bson.M{
+			"last_sync_time": time.Now(),
+			"is_active":      true,
+		},
 	}
-	server.watcher.AddHandler(server)
-	return server
+	opts := options.Update().SetUpsert(true)
+
+	_, err := collection.UpdateOne(context.Background(), filter, update, opts)
+	return err
 }
 
-func main() {
-	Server()
+func (s *FileTransferServer) getLastSyncTime(sessionID string) (time.Time, error) {
+	collection := s.db.Database("sync").Collection("client_sessions")
+	var session ct.ClientSession
+	err := collection.FindOne(
+		context.Background(),
+		bson.M{"session_id": sessionID},
+	).Decode(&session)
+
+	if err == mongo.ErrNoDocuments {
+		return time.Time{}, nil
+	}
+	return session.LastSyncTime, err
+}
+
+func (s *FileTransferServer) ControlStream(
+	ctx context.Context,
+	stream *connect.BidiStream[ft.ControlMessage, ft.ControlMessage],
+) error {
+	msg, err := stream.Receive()
+	log.Println(msg)
+	if err != nil {
+		return err
+	}
+
+	sessionID := msg.SessionId
+	lastSync, err := s.getLastSyncTime(sessionID)
+	if err != nil {
+		return err
+	}
+	log.Printf("Last sync time: %s, client: %s", lastSync, sessionID)
+
+	// Get files modified since last sync
+	//NOTE: I don't have to create another message for controlling file emits since the
+	//"socket" already reconnects for latest files anyway
+	//all I have to do I send files to the client
+	collection := s.db.Database("sync").Collection("files")
+	filter := bson.M{
+		"timestamp": bson.M{"$gt": lastSync},
+		"active":    true,
+	}
+
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(ctx)
+
+	// Send modified files to client
+	for cursor.Next(ctx) {
+		var file ct.File
+		if err := cursor.Decode(&file); err != nil {
+			continue
+		}
+
+		if err := stream.Send(&ft.ControlMessage{
+			SessionId: sessionID,
+			Type:      ft.ControlMessage_NEW_FILE,
+			Filename:  file.Location,
+		}); err != nil {
+			return err
+		}
+	}
+
+	// Update client's last sync time
+	if err := s.updateClientTimestamp(sessionID); err != nil {
+		return err
+	}
+	for {
+		msg, err := stream.Receive()
+		log.Println(msg)
+		if err != nil {
+			return err
+		}
+	}
 }

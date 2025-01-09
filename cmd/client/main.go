@@ -24,8 +24,9 @@ func main() {
 
 func test() {
 	// Set up paths
-	dbPath := "./sync.db"
-	watchPath := "./content"
+	dbPath := "./sync-test.db"
+	watchPath := "./content-test"
+	clientName := "test-2"
 
 	// Ensure content directory exists
 	if err := os.MkdirAll(watchPath, 0755); err != nil {
@@ -33,7 +34,8 @@ func test() {
 	}
 
 	// Initialize file watcher
-	fw, err := watcher.InitFileWatcher(dbPath, watchPath)
+	//
+	fw, err := watcher.InitFileWatcher(dbPath, watchPath, clientName)
 	if err != nil {
 		log.Fatalf("Failed to initialize file watcher: %v", err)
 	}

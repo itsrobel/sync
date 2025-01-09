@@ -38,7 +38,7 @@ type FileWatcher struct {
 	mu            sync.RWMutex
 }
 
-func InitFileWatcher(dbPath, watchPath string) (*FileWatcher, error) {
+func InitFileWatcher(dbPath, watchPath, clientName string) (*FileWatcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
@@ -61,12 +61,14 @@ func InitFileWatcher(dbPath, watchPath string) (*FileWatcher, error) {
 		},
 		"http://localhost:50051",
 	)
+
 	fw := &FileWatcher{
 		watcher: watcher,
 		db:      db,
 		// client:    filetransferconnect.NewFileServiceClient(http.DefaultClient, "http://localhost:50051"),
-		client:    client,
-		sessionID: fmt.Sprintf("session_%d", time.Now().UnixNano()),
+		client: client,
+		// sessionID: fmt.Sprintf("session_%d", time.Now().UnixNano()),
+		sessionID: clientName,
 		done:      make(chan struct{}),
 	}
 
@@ -74,7 +76,7 @@ func InitFileWatcher(dbPath, watchPath string) (*FileWatcher, error) {
 	go fw.connectionTicker()
 
 	// Process initial files regardless of connection status
-	if err := fw.processInitialFiles(); err != nil {
+	if err := fw.processInitialFiles(watchPath); err != nil {
 		return nil, err
 	}
 
@@ -151,7 +153,7 @@ func (fw *FileWatcher) handleControlStream() {
 		case ft.ControlMessage_READY:
 			fw.setConnected(true)
 			log.Printf("Server connection established for session: %s", fw.sessionID)
-		case ft.ControlMessage_NEW_FILE_AVAILABLE:
+		case ft.ControlMessage_NEW_FILE:
 			log.Printf("New file available on server: %s", msg.Filename)
 		}
 	}
@@ -243,12 +245,12 @@ func (fw *FileWatcher) IsConnected() bool {
 	return fw.isConnected
 }
 
-func (fw *FileWatcher) processInitialFiles() error {
-	return filepath.Walk("./content", func(path string, info os.FileInfo, err error) error {
+func (fw *FileWatcher) processInitialFiles(watchPath string) error {
+	return filepath.Walk(watchPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if path != "./content" {
+		if path != watchPath {
 			isFile, _ := sql_manager.FindFileByLocation(fw.db, path)
 			var fileID string
 
