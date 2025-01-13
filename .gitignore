@@ -1,2 +1,2 @@
-./sync.db
+*.db
 bin/
