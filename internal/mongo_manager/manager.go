@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
-	"time"
 
+	ft "github.com/itsrobel/sync/internal/services/filetransfer"
 	ct "github.com/itsrobel/sync/internal/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -24,56 +23,30 @@ func ensureIndexes(collection *mongo.Collection) error {
 	return err
 }
 
-// make this return the conenction
-
-// func updateFile(client *mongo.Client, location string, content string) {
-// 	collection := client.Database("sync").Collection("server")
-// 	fileUpdate := FileChange{contentChange: content, location: location}
-//
-// 	// find the fileID of the file with the specified location
+// NOTE: When I move the structure to build file content via
+// func CreateFileInital(collection *mongo.Collection, file string) (string, error) {
+// 	file := ct.File{Location: location, Active: true, Content: ""}
+// 	ensureIndexes(collection)
+// 	result, err := collection.InsertOne(context.Background(), file)
+// 	if err != nil {
+// 		log.Fatal("Error when trying to create a file: ", err)
+// 		return "", nil
+// 	}
+// 	log.Printf("Inserted document with ID: %s at %s", result.InsertedID, location)
+// 	return result.InsertedID.(string), nil
 // }
 
-func CreateFile(collection *mongo.Collection, location string) string {
-	file := ct.File{Location: location, Active: true, Contents: ""}
-	err := ensureIndexes(collection)
-	result, err := collection.InsertOne(context.Background(), file)
-	if err != nil {
-		log.Fatal("Error when trying to create a file: ", err)
-	}
-	log.Printf("Inserted document with ID: %s at %s", result.InsertedID, location)
-	return result.InsertedID.(string)
-}
-
-func CreateFileVersion(collection *mongo.Collection, fileID string) {
-	file, _ := findFile(collection, fileID)
-	location := file.Location
-	contents := file.Contents
-
-	fileVersion := ct.FileVersion{Timestamp: time.Now(), Location: location, Contents: contents, FileID: fileID}
+func CreateFileVersion(collection *mongo.Collection, file *ft.FileVersionData) {
+	// TODO: check for uuid duplicates later from multiple clients creating files
+	fileVersion := ct.FileVersion{Timestamp: file.Timestamp.AsTime(), Location: file.Location, Content: string(file.Content), FileId: file.FileId}
 	result, err := collection.InsertOne(context.Background(), fileVersion)
 	if err != nil {
 		log.Fatal("Error when trying to create a file version: ", err)
 	}
-	log.Printf("Inserted document with ID: %s at %s", result.InsertedID, location)
+	log.Printf("Inserted document with ID: %s at %s", result.InsertedID, file.Location)
 }
 
-// TODO: search by string location and turn active to false
-// func deleteFile(location string) {
-// }
-
-// TODO: I need to figure out what information I can get from the file watch
-// I need to return ID
-func ValidFileExtension(location string) bool {
-	extensions := []string{".md", ".pdf"}
-	for _, ext := range extensions {
-		if strings.HasSuffix(location, ext) {
-			return true
-		}
-	}
-	return false
-}
-
-func findFile(collection *mongo.Collection, location string) (*ct.File, error) {
+func FindFileByLocation(collection *mongo.Collection, location string) (*ct.File, error) {
 	filter := bson.M{"location": location}
 	var result ct.File
 	err := collection.FindOne(context.Background(), filter).Decode(&result)
@@ -87,7 +60,20 @@ func findFile(collection *mongo.Collection, location string) (*ct.File, error) {
 	return &result, nil
 }
 
-func GetAllDocuments(collection *mongo.Collection) ([]ct.File, error) {
+func FindFileById(collection *mongo.Collection, fileID string) (*ct.File, error) {
+	filter := bson.M{"ID": fileID}
+	var result ct.File
+	err := collection.FindOne(context.Background(), filter).Decode(&result)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("no document found with ID: %s", fileID)
+		}
+		return nil, fmt.Errorf("error finding document: %v", err)
+	}
+	return &result, nil
+}
+
+func GetAllDocuments(collection *mongo.Collection) ([]ct.FileVersion, error) {
 	// Create a context (you might want to use a timeout context in a real application)
 	ctx := context.Background()
 
@@ -99,11 +85,11 @@ func GetAllDocuments(collection *mongo.Collection) ([]ct.File, error) {
 	defer cursor.Close(ctx)
 
 	// Create a slice to store the documents
-	var documents []ct.File
+	var documents []ct.FileVersion
 
 	// Iterate through the cursor and decode each document
 	for cursor.Next(ctx) {
-		var doc ct.File
+		var doc ct.FileVersion
 		if err := cursor.Decode(&doc); err != nil {
 			return nil, err
 		}
@@ -115,10 +101,11 @@ func GetAllDocuments(collection *mongo.Collection) ([]ct.File, error) {
 		return nil, err
 	}
 
+	log.Println(documents)
 	return documents, nil
 }
 
-func deleteAllDocuments(collection *mongo.Collection) (int64, error) {
+func DeleteAllDocuments(collection *mongo.Collection) (int64, error) {
 	// Create a context (you might want to use a timeout context in a real application)
 	ctx := context.Background()
 
@@ -130,5 +117,3 @@ func deleteAllDocuments(collection *mongo.Collection) (int64, error) {
 
 	return result.DeletedCount, nil
 }
-
-// func getAllFiles()

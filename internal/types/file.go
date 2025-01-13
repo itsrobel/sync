@@ -12,18 +12,18 @@ const (
 // NOTE: ID's are created by default
 // time?
 type File struct {
-	ID       string
+	Id       string `bson:"id"`
 	Location string `bson:"location"`
-	Contents string `bson:"contents"`
+	Content  string `bson:"contents"`
 	Active   bool   `bson:"active"` // this can decide whether or not to sync
 }
 
 // Every Hour if changes have been made create a new Version
 // Shouldn't the file just point to the latest version?
 type FileVersion struct {
-	ID        string
+	Client    string    `bson:"client"`
 	Timestamp time.Time `bson:"timestamp"` // Time when this version was created
 	Location  string    `bson:"location"`  // File location
-	Contents  string    `bson:"contents"`  // Full contents of the file at this version
-	FileID    string    `bson:"file_id"`   // Unique ID for the file
+	Content   string    `bson:"contents"`  // Full contents of the file at this version
+	FileId    string    `bson:"file_id"`   // Unique ID for the file
 }
