@@ -36,25 +36,15 @@ const (
 	// FileServiceControlStreamProcedure is the fully-qualified name of the FileService's ControlStream
 	// RPC.
 	FileServiceControlStreamProcedure = "/filetransfer.FileService/ControlStream"
-	// FileServiceTransferFileProcedure is the fully-qualified name of the FileService's TransferFile
-	// RPC.
-	FileServiceTransferFileProcedure = "/filetransfer.FileService/TransferFile"
 	// FileServiceSendFileToServerProcedure is the fully-qualified name of the FileService's
 	// SendFileToServer RPC.
 	FileServiceSendFileToServerProcedure = "/filetransfer.FileService/SendFileToServer"
-	// FileServiceValidateServerProcedure is the fully-qualified name of the FileService's
-	// ValidateServer RPC.
-	FileServiceValidateServerProcedure = "/filetransfer.FileService/ValidateServer"
 )
 
 // FileServiceClient is a client for the filetransfer.FileService service.
 type FileServiceClient interface {
-	// rpc StreamFileChanges(stream FileChange) returns (stream FileChange) {}; // Bidirectional streaming for file changes
-	// rpc SendFileToClient(FileRequest) returns (stream FileData) {};
 	ControlStream(context.Context) *connect.BidiStreamForClient[filetransfer.ControlMessage, filetransfer.ControlMessage]
-	TransferFile(context.Context, *connect.Request[filetransfer.FileTransferRequest]) (*connect.ServerStreamForClient[filetransfer.FileChunk], error)
-	SendFileToServer(context.Context) *connect.ClientStreamForClient[filetransfer.FileData, filetransfer.ActionResponse]
-	ValidateServer(context.Context, *connect.Request[filetransfer.ActionResponse]) (*connect.Response[filetransfer.ActionResponse], error)
+	SendFileToServer(context.Context) *connect.ClientStreamForClient[filetransfer.FileVersionData, filetransfer.ActionResponse]
 }
 
 // NewFileServiceClient constructs a client for the filetransfer.FileService service. By default, it
@@ -74,22 +64,10 @@ func NewFileServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(fileServiceMethods.ByName("ControlStream")),
 			connect.WithClientOptions(opts...),
 		),
-		transferFile: connect.NewClient[filetransfer.FileTransferRequest, filetransfer.FileChunk](
-			httpClient,
-			baseURL+FileServiceTransferFileProcedure,
-			connect.WithSchema(fileServiceMethods.ByName("TransferFile")),
-			connect.WithClientOptions(opts...),
-		),
-		sendFileToServer: connect.NewClient[filetransfer.FileData, filetransfer.ActionResponse](
+		sendFileToServer: connect.NewClient[filetransfer.FileVersionData, filetransfer.ActionResponse](
 			httpClient,
 			baseURL+FileServiceSendFileToServerProcedure,
 			connect.WithSchema(fileServiceMethods.ByName("SendFileToServer")),
-			connect.WithClientOptions(opts...),
-		),
-		validateServer: connect.NewClient[filetransfer.ActionResponse, filetransfer.ActionResponse](
-			httpClient,
-			baseURL+FileServiceValidateServerProcedure,
-			connect.WithSchema(fileServiceMethods.ByName("ValidateServer")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -98,9 +76,7 @@ func NewFileServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 // fileServiceClient implements FileServiceClient.
 type fileServiceClient struct {
 	controlStream    *connect.Client[filetransfer.ControlMessage, filetransfer.ControlMessage]
-	transferFile     *connect.Client[filetransfer.FileTransferRequest, filetransfer.FileChunk]
-	sendFileToServer *connect.Client[filetransfer.FileData, filetransfer.ActionResponse]
-	validateServer   *connect.Client[filetransfer.ActionResponse, filetransfer.ActionResponse]
+	sendFileToServer *connect.Client[filetransfer.FileVersionData, filetransfer.ActionResponse]
 }
 
 // ControlStream calls filetransfer.FileService.ControlStream.
@@ -108,29 +84,15 @@ func (c *fileServiceClient) ControlStream(ctx context.Context) *connect.BidiStre
 	return c.controlStream.CallBidiStream(ctx)
 }
 
-// TransferFile calls filetransfer.FileService.TransferFile.
-func (c *fileServiceClient) TransferFile(ctx context.Context, req *connect.Request[filetransfer.FileTransferRequest]) (*connect.ServerStreamForClient[filetransfer.FileChunk], error) {
-	return c.transferFile.CallServerStream(ctx, req)
-}
-
 // SendFileToServer calls filetransfer.FileService.SendFileToServer.
-func (c *fileServiceClient) SendFileToServer(ctx context.Context) *connect.ClientStreamForClient[filetransfer.FileData, filetransfer.ActionResponse] {
+func (c *fileServiceClient) SendFileToServer(ctx context.Context) *connect.ClientStreamForClient[filetransfer.FileVersionData, filetransfer.ActionResponse] {
 	return c.sendFileToServer.CallClientStream(ctx)
-}
-
-// ValidateServer calls filetransfer.FileService.ValidateServer.
-func (c *fileServiceClient) ValidateServer(ctx context.Context, req *connect.Request[filetransfer.ActionResponse]) (*connect.Response[filetransfer.ActionResponse], error) {
-	return c.validateServer.CallUnary(ctx, req)
 }
 
 // FileServiceHandler is an implementation of the filetransfer.FileService service.
 type FileServiceHandler interface {
-	// rpc StreamFileChanges(stream FileChange) returns (stream FileChange) {}; // Bidirectional streaming for file changes
-	// rpc SendFileToClient(FileRequest) returns (stream FileData) {};
 	ControlStream(context.Context, *connect.BidiStream[filetransfer.ControlMessage, filetransfer.ControlMessage]) error
-	TransferFile(context.Context, *connect.Request[filetransfer.FileTransferRequest], *connect.ServerStream[filetransfer.FileChunk]) error
-	SendFileToServer(context.Context, *connect.ClientStream[filetransfer.FileData]) (*connect.Response[filetransfer.ActionResponse], error)
-	ValidateServer(context.Context, *connect.Request[filetransfer.ActionResponse]) (*connect.Response[filetransfer.ActionResponse], error)
+	SendFileToServer(context.Context, *connect.ClientStream[filetransfer.FileVersionData]) (*connect.Response[filetransfer.ActionResponse], error)
 }
 
 // NewFileServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -146,34 +108,18 @@ func NewFileServiceHandler(svc FileServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(fileServiceMethods.ByName("ControlStream")),
 		connect.WithHandlerOptions(opts...),
 	)
-	fileServiceTransferFileHandler := connect.NewServerStreamHandler(
-		FileServiceTransferFileProcedure,
-		svc.TransferFile,
-		connect.WithSchema(fileServiceMethods.ByName("TransferFile")),
-		connect.WithHandlerOptions(opts...),
-	)
 	fileServiceSendFileToServerHandler := connect.NewClientStreamHandler(
 		FileServiceSendFileToServerProcedure,
 		svc.SendFileToServer,
 		connect.WithSchema(fileServiceMethods.ByName("SendFileToServer")),
 		connect.WithHandlerOptions(opts...),
 	)
-	fileServiceValidateServerHandler := connect.NewUnaryHandler(
-		FileServiceValidateServerProcedure,
-		svc.ValidateServer,
-		connect.WithSchema(fileServiceMethods.ByName("ValidateServer")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/filetransfer.FileService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case FileServiceControlStreamProcedure:
 			fileServiceControlStreamHandler.ServeHTTP(w, r)
-		case FileServiceTransferFileProcedure:
-			fileServiceTransferFileHandler.ServeHTTP(w, r)
 		case FileServiceSendFileToServerProcedure:
 			fileServiceSendFileToServerHandler.ServeHTTP(w, r)
-		case FileServiceValidateServerProcedure:
-			fileServiceValidateServerHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -187,14 +133,6 @@ func (UnimplementedFileServiceHandler) ControlStream(context.Context, *connect.B
 	return connect.NewError(connect.CodeUnimplemented, errors.New("filetransfer.FileService.ControlStream is not implemented"))
 }
 
-func (UnimplementedFileServiceHandler) TransferFile(context.Context, *connect.Request[filetransfer.FileTransferRequest], *connect.ServerStream[filetransfer.FileChunk]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("filetransfer.FileService.TransferFile is not implemented"))
-}
-
-func (UnimplementedFileServiceHandler) SendFileToServer(context.Context, *connect.ClientStream[filetransfer.FileData]) (*connect.Response[filetransfer.ActionResponse], error) {
+func (UnimplementedFileServiceHandler) SendFileToServer(context.Context, *connect.ClientStream[filetransfer.FileVersionData]) (*connect.Response[filetransfer.ActionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("filetransfer.FileService.SendFileToServer is not implemented"))
-}
-
-func (UnimplementedFileServiceHandler) ValidateServer(context.Context, *connect.Request[filetransfer.ActionResponse]) (*connect.Response[filetransfer.ActionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("filetransfer.FileService.ValidateServer is not implemented"))
 }

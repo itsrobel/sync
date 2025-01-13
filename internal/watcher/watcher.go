@@ -22,8 +22,9 @@ import (
 	ft "github.com/itsrobel/sync/internal/services/filetransfer"
 	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
 	"github.com/itsrobel/sync/internal/sql_manager"
-	"github.com/itsrobel/sync/internal/types"
+	ct "github.com/itsrobel/sync/internal/types"
 	"golang.org/x/net/http2"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type FileWatcher struct {
@@ -63,17 +64,15 @@ func InitFileWatcher(dbPath, watchPath, clientName string) (*FileWatcher, error)
 	)
 
 	fw := &FileWatcher{
-		watcher: watcher,
-		db:      db,
-		// client:    filetransferconnect.NewFileServiceClient(http.DefaultClient, "http://localhost:50051"),
-		client: client,
-		// sessionID: fmt.Sprintf("session_%d", time.Now().UnixNano()),
+		watcher:   watcher,
+		db:        db,
+		client:    client,
 		sessionID: clientName,
 		done:      make(chan struct{}),
 	}
+	go fw.connectionTicker()
 
 	// Start the connection ticker
-	go fw.connectionTicker()
 
 	// Process initial files regardless of connection status
 	if err := fw.processInitialFiles(watchPath); err != nil {
@@ -142,12 +141,15 @@ func (fw *FileWatcher) handleControlStream() {
 	}()
 
 	for {
+
 		msg, err := fw.controlStream.Receive()
 		if err != nil {
 			fw.setConnected(false)
 			log.Printf("Control stream error: %v", err)
 			return
 		}
+
+		log.Println("the message is: ", msg)
 
 		switch msg.Type {
 		case ft.ControlMessage_READY:
@@ -177,40 +179,44 @@ func (fw *FileWatcher) startControlStream() error {
 	return nil
 }
 
-func (fw *FileWatcher) file_upload(file_path string) error {
+// NOTE: this now uploads via the information returned in the database
+func (fw *FileWatcher) file_upload(fileVersion *ct.FileVersion) error {
+	log.Println("uploading file: ", fileVersion.Location)
 	if err := fw.sendControlMessage(&ft.ControlMessage{
 		SessionId: fw.sessionID,
 		Type:      ft.ControlMessage_START_TRANSFER,
-		Filename:  filepath.Base(file_path),
+		Filename:  filepath.Base(fileVersion.Location),
 	}); err != nil {
 		return err
 	}
 
-	file, err := os.Open(file_path)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
+	// file, err := os.Open(fileVersion.)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to open file: %w", err)
+	// }
+	// defer file.Close()
 
 	stream := fw.client.SendFileToServer(context.Background())
-	buffer := make([]byte, types.ChunkSize)
+	buffer := []byte(fileVersion.Content)
+	chunkSize := ct.ChunkSize
 
-	for {
-		n, err := file.Read(buffer)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("error reading file: %v", err)
+	for i := 0; i < len(buffer); i += chunkSize {
+		end := i + chunkSize
+		if end > len(buffer) {
+			end = len(buffer)
 		}
 
-		if err := stream.Send(&ft.FileData{
-			Id:       fw.sessionID,
-			Location: filepath.Base(file_path),
-			Content:  buffer[:n],
-			Offset:   int64(n),
+		chunk := buffer[i:end]
+		if err := stream.Send(&ft.FileVersionData{
+			Id:        fileVersion.Id,
+			Location:  fileVersion.Location, // or any identifier you want to use
+			FileId:    fileVersion.FileId,   // or any identifier you want to use
+			Timestamp: timestamppb.New(fileVersion.Timestamp),
+			Client:    fw.sessionID,
+			Content:   chunk,
+			Offset:    int64(len(chunk)),
 		}); err != nil {
-			return fmt.Errorf("error sending file data: %v", err)
+			return fmt.Errorf("error sending string data: %v", err)
 		}
 	}
 
@@ -251,26 +257,31 @@ func (fw *FileWatcher) processInitialFiles(watchPath string) error {
 			return err
 		}
 		if path != watchPath {
-			isFile, _ := sql_manager.FindFileByLocation(fw.db, path)
-			var fileID string
-
-			if isFile == nil {
+			// TODO: find files by location is likely broken
+			file, err := sql_manager.FindFileByLocation(fw.db, path)
+			if err != nil {
+				return err
+			}
+			if file == nil {
 				var err error
-				fileID, err = sql_manager.CreateFile(fw.db, path)
+				file, err = sql_manager.CreateFileInitial(fw.db, path)
 				if err != nil {
 					return fmt.Errorf("failed to create file record: %w", err)
 				}
 				log.Printf("Created new file record: %s", path)
-			} else {
-				fileID = isFile.ID
 			}
 
-			if err := fw.processFileContent(path, fileID); err != nil {
+			// TODO: have proccesfilecontent return file to then upload
+			fileVersion, err := fw.processFileContent(path, file)
+			if err != nil {
 				return err
 			}
 
+			log.Println("connection status: ", fw.IsConnected())
 			if fw.IsConnected() {
-				if err := fw.file_upload(path); err != nil {
+
+				log.Println("connected to server and uploading file: ", fileVersion.Location)
+				if err := fw.file_upload(fileVersion); err != nil {
 					return err
 				}
 			}
@@ -279,32 +290,32 @@ func (fw *FileWatcher) processInitialFiles(watchPath string) error {
 	})
 }
 
-func (fw *FileWatcher) processFileContent(path, fileID string) error {
-	file, err := os.Open(path)
+func (fw *FileWatcher) processFileContent(path string, file *ct.File) (*ct.FileVersion, error) {
+	raw_file, err := os.Open(path)
+	tmpFV := &ct.FileVersion{}
 	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
+		return tmpFV, err
 	}
-	defer file.Close()
+	defer raw_file.Close()
 
 	var content strings.Builder
 	buffer := make([]byte, 8192)
-
 	for {
-		n, err := file.Read(buffer)
+		n, err := raw_file.Read(buffer)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("failed to read file: %w", err)
+			return tmpFV, err
 		}
 		content.Write(buffer[:n])
 	}
 
-	if err := sql_manager.CreateFileVersion(fw.db, fileID, content.String()); err != nil {
-		return fmt.Errorf("failed to create file version: %w", err)
+	fileVersion, err := sql_manager.CreateFileVersion(fw.db, file, content.String())
+	if err != nil {
+		return fileVersion, err
 	}
-
-	return nil
+	return fileVersion, nil
 }
 
 func (fw *FileWatcher) startWatching(path string) error {
@@ -346,14 +357,16 @@ func (fw *FileWatcher) handleEvent(event fsnotify.Event) error {
 
 	switch {
 	case event.Op&fsnotify.Create == fsnotify.Create:
-		isFile, _ := sql_manager.FindFileByLocation(fw.db, event.Name)
-		if isFile == nil {
-			fileID, err := sql_manager.CreateFile(fw.db, event.Name)
+		file, _ := sql_manager.FindFileByLocation(fw.db, event.Name)
+
+		if file == nil {
+			file, err := sql_manager.CreateFileInitial(fw.db, event.Name)
 			if err != nil {
 				return fmt.Errorf("failed to create file record: %w", err)
 			}
 			log.Printf("Created new file: %s", event.Name)
-			return fw.processFileContent(event.Name, fileID)
+			_, err = fw.processFileContent(event.Name, file)
+			return err
 		}
 
 	case event.Op&fsnotify.Write == fsnotify.Write:
@@ -361,12 +374,14 @@ func (fw *FileWatcher) handleEvent(event fsnotify.Event) error {
 		if isFile == nil {
 			return fmt.Errorf("file not found in database: %s", event.Name)
 		}
-		if err := fw.processFileContent(event.Name, isFile.ID); err != nil {
+
+		fileVersion, err := fw.processFileContent(event.Name, isFile)
+		if err != nil {
 			return err
 		}
-		return fw.file_upload(event.Name)
+		log.Printf("fileVersion: %v", fileVersion)
+		return fw.file_upload(fileVersion)
 	}
-
 	return nil
 }
 

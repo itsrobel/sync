@@ -6,8 +6,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	// "fmt"
-
 	// ct "github.com/itsrobel/sync/internal/types"
 	"github.com/itsrobel/sync/internal/watcher"
 	// "io"
@@ -30,7 +28,6 @@ func test() {
 	}
 
 	// Initialize file watcher
-	//
 	fw, err := watcher.InitFileWatcher(dbPath, watchPath, clientName)
 	if err != nil {
 		log.Fatalf("Failed to initialize file watcher: %v", err)

@@ -196,16 +196,29 @@ the contents and the ID from the sql table
         this then makes almost all my rpc requests a bi directional stream
 
         client connects to server -> server sends down updated files from mongodb
+
+        since the files are not created deleted or moved directly from the server
+
+
+        the server data structures can be simpler. We can assume.
+          - files do not neeed their own struture from version's since we are
+          just appending or editing information like a log
+
+
+
+
         client uploads files -> server saves it
 
   - [x] I need the server to to be able to upload files to the server on start
-  - [ ] each client is given a session id, but I think giving them a self assigned name would be better, to track what files, they don't have
+  - [ ] each client is given a session id, but I think giving them a self assigned name would be
+        better, to track what files, they don't have
         based on when they lasted connected via timestamps
 
 ### Bonus
 
-- [ ] The fileversions need to be diffs in a order that can than
-      reconstructed on fileID request
+- [ ] The file_versions need to be diffs in a order that can than
+      reconstructed on file_ID request
+- [ ] on the server separate out the file and file versions into a separate, for file building based on diffs
 
 ## Risks and Challenges
 
@@ -222,5 +235,3 @@ the contents and the ID from the sql table
 
 I need a interval period of file changes like a memory queue that keeps track
 of the things that happen to the file and the current state
-
-[project](https://excalidraw.com/#json=bQJDPcZEzUkbzQrHR1t1r,NgVZJusMtruL-t0eVLhg2Q)

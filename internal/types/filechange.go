@@ -6,5 +6,5 @@ type FileChange struct {
 	Type      string // "add" or "remove"
 	Content   string
 	Position  int    // Line number where change occurred
-	VersionID string `bson:"version_id"` // Unique ID for the file
+	VersionId string `bson:"version_id"` // Unique ID for the file
 }

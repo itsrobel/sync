@@ -1,37 +1,25 @@
 syntax = "proto3";
 package filetransfer;
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/itsrobel/sync/internal/services/filetransfer";
-
 service FileService {
-  //rpc StreamFileChanges(stream FileChange) returns (stream FileChange) {}; // Bidirectional streaming for file changes
-  //rpc SendFileToClient(FileRequest) returns (stream FileData) {};
   rpc ControlStream(stream ControlMessage) returns (stream ControlMessage) {};
-  rpc TransferFile(FileTransferRequest) returns (stream FileChunk) {};
-  rpc SendFileToServer(stream FileData) returns (ActionResponse) {};
-  rpc ValidateServer(ActionResponse) returns  (ActionResponse) {};
-
+  rpc SendFileToServer(stream FileVersionData) returns (ActionResponse) {};
   //rpc DeleteFile(FileRequest) returns (ActionResponse);
   //rpc MoveFile(MoveFileRequest) returns (ActionResponse);
 }
-// that should then determine the actions of either
-// look up in mongo db if the file exists
-//
-// the file change should be the first it of information that is sent
-// if the file does not exist yeah, then send the entire file
 // TODO: I need to get file differences
 // TODO: add the directory watching to the grpc
-message FileData {
-  string id = 1;        // Persistent unique identifier for the file
-  bytes content = 2;    // File content (for upload/download)
-  string location = 3;  // location of the file
-  int64 offset = 4;     // Offset for streaming
-  int64 total_size = 5; // Total size of the file
-}
-
-message FileTransferRequest {
-    string session_id = 1;
-    string filename = 2;
+message FileVersionData {
+  string id = 1;        // Persistent unique identifier for the file *version*
+  google.protobuf.Timestamp timestamp = 2;  // location of the file
+  bytes content = 3;    // File content (for upload/download)
+  string location = 4;// location of the file
+  string file_id = 5;   // Id of the file
+  string client = 6;
+  int64 offset = 7;     // Offset for streaming
+  int64 total_size = 8; // Total size of the file
 }
 
 
@@ -55,31 +43,6 @@ message ControlMessage {
     }
 }
 
-message FileChunk {
-    bytes content = 1;
-    string filename = 2;
-}
-
-
-message FileChange {
-  string content = 1;   // File content
-  string location = 2;  // Path to the file
-  string file_id = 3;   // Unique identifier for the file
-  string change_id = 4; // Unique identifier for the change
-  int64 offset = 5;     // Offset for streaming
-  int64 total_size = 6; // Total size of the file change
-  int64 timestamp = 7;  // Timestamp for the change
-}
-
-message FileRequest {
-  string id = 1;   // Persistent unique identifier for the file
-  string path = 2; // Path to the file (used for delete or download)
-}
-
-message MoveFileRequest {
-  string id = 1;          // Persistent unique identifier for the file
-  string destination = 2; // New path after move/rename
-}
 
 message ActionResponse {
   bool success = 1;
