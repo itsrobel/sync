@@ -25,6 +25,7 @@ func NewHandlers(greetClient filetransferconnect.FileServiceClient) *Handlers {
 }
 
 func (h *Handlers) Index(w http.ResponseWriter, r *http.Request) {
+	// TODO: make a request to the backend and then pass that into templates.Index
 	component := templates.Index()
 	component.Render(context.Background(), w)
 }

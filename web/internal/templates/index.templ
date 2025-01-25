@@ -1,27 +1,47 @@
 
 package templates
 
-templ Index() {
-    @Layout("Home") {
-        <div class="max-w-md mx-auto">
-            <form class="space-y-4" hx-post="/greet" hx-target="#greeting" hx-swap="innerHTML">
-                <div class="form-control">
-                    <label class="label">
-                        <span class="label-text">Name</span>
-                    </label>
-                    <input type="text" name="name" class="input input-bordered" required/>
-                </div>
-                <button type="submit" class="btn btn-primary w-full">
-                    Greet
-                </button>
-            </form>
-            <div id="greeting" class="mt-4 text-center"></div>
-        </div>
-    }
+import "github.com/itsrobel/sync/web/internal/types"
+
+templ Index(FileList []types.File) {
+	@Layout("Home") {
+		<div class="max-w-md mx-auto">
+			<form class="space-y-4" hx-post="/greet" hx-target="#greeting" hx-swap="innerHTML">
+				<div class="form-control">
+					<label class="label">
+						<span class="label-text">Name</span>
+					</label>
+					<input type="text" name="name" class="input input-bordered" required/>
+				</div>
+				<button type="submit" class="btn btn-primary w-full">
+					Greet
+				</button>
+			</form>
+			<div id="greeting" class="mt-4 text-center"></div>
+			@FileDrawer(FileList)
+		</div>
+	}
+}
+
+templ FileItem(file types.File) {
+	<li>
+		<h1 class="hidden md:block">
+			{ file.Location }
+		</h1>
+	</li>
+}
+
+templ FileDrawer(FileList []types.File) {
+	<h2 class="card-title">Files</h2>
+	<ul class="max-h-80 menu bg-base-200 w-full rounded-box overflow-y-scroll scrollbar-hide">
+		for _, file := range FileList {
+			@FileItem(file)
+		}
+	</ul>
 }
 
 templ GreetingResponse(greeting string) {
-    <div class="alert alert-success">
-        <span>{ greeting }</span>
-    </div>
+	<div class="alert alert-success">
+		<span>{ greeting }</span>
+	</div>
 }

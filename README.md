@@ -178,7 +178,7 @@ the contents and the ID from the sql table
 ## I need to focus on finishing the project into a working demo duck everything else
 
 - [x] the latest version of the file will just be the file itself
-  - [ ] I need a function to get the latest version of a file
+- [ ] I need a function to get the latest version of a file
 - [x] when the client starts check all files in the target directory
 
   - a new version of each file is created
@@ -186,12 +186,12 @@ the contents and the ID from the sql table
 - [x] try server connection on client start
 - [x] upload files if connection is made
       have the connection request be on conditional
-- [ ] update send the file update to server when client is connected
+- [x] update send the file update to server when client is connected
 - [x] make the ping/pong or the server to client connection to check live
 
-- [ ] setup bi directional streaming for session handling
+- [x] setup bi directional streaming for session handling
 
-  - [ ] the default behavior for the control stream is to constantly re check if the server is live
+  - [x] the default behavior for the control stream is to constantly re check if the server is live
         since part of that logic is sending down updated files we do not have to make another controller for the file downloads
         and instead can send them as a return stream response
         this then makes almost all my rpc requests a bi directional stream
@@ -211,11 +211,13 @@ the contents and the ID from the sql table
         client uploads files -> server saves it
 
   - [x] I need the server to to be able to upload files to the server on start
-  - [ ] each client is given a session id, but I think giving them a self assigned name would be
+  - [x] each client is given a session id, but I think giving them a self assigned name would be
         better, to track what files, they don't have
         based on when they lasted connected via timestamps
 
 - [ ] make a rpc call on the web app that reads the latest list of files
+- [ ] Re structure the project so that there is only one copy of each file in "files" that is
+      updated on client writes to the latest version
 
 ### Bonus
 

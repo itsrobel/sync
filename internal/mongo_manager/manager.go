@@ -24,6 +24,7 @@ func ensureIndexes(collection *mongo.Collection) error {
 }
 
 // NOTE: When I move the structure to build file content via
+
 // func CreateFileInital(collection *mongo.Collection, file string) (string, error) {
 // 	file := ct.File{Location: location, Active: true, Content: ""}
 // 	ensureIndexes(collection)
@@ -36,7 +37,9 @@ func ensureIndexes(collection *mongo.Collection) error {
 // 	return result.InsertedID.(string), nil
 // }
 
-func CreateFileVersion(collection *mongo.Collection, file *ft.FileVersionData) {
+// TODO: set this to only write to the file version table
+func CreateFileVersion(database *mongo.Database, file *ft.FileVersionData) {
+	collection := database.Collection("file_versions")
 	// TODO: check for uuid duplicates later from multiple clients creating files
 	fileVersion := ct.FileVersion{Timestamp: file.Timestamp.AsTime(), Location: file.Location, Content: string(file.Content), FileId: file.FileId}
 	result, err := collection.InsertOne(context.Background(), fileVersion)
@@ -44,6 +47,30 @@ func CreateFileVersion(collection *mongo.Collection, file *ft.FileVersionData) {
 		log.Fatal("Error when trying to create a file version: ", err)
 	}
 	log.Printf("Inserted document with ID: %s at %s", result.InsertedID, file.Location)
+}
+
+// TODO: make a function to update File store in files based on the lasted version of CreateFileVersion
+
+func UpdateFile(database *mongo.Database, file *ct.File) error {
+	collection := database.Collection("files")
+	filter := bson.M{"id": file.Id}
+
+	update := bson.M{
+		"$set": bson.M{
+			"location": file.Location,
+			"contents": file.Content,
+			"active":   file.Active,
+		},
+	}
+
+	opts := options.Update().SetUpsert(true)
+	_, err := collection.UpdateOne(context.TODO(), filter, update, opts)
+	log.Printf("Updated document with ID: %s at %s, to the content: %s", file.Id, file.Location, file.Content)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func FindFileByLocation(collection *mongo.Collection, location string) (*ct.File, error) {
@@ -73,7 +100,7 @@ func FindFileById(collection *mongo.Collection, fileID string) (*ct.File, error)
 	return &result, nil
 }
 
-func GetAllDocuments(collection *mongo.Collection) ([]ct.FileVersion, error) {
+func GetAllDocuments(collection *mongo.Collection) ([]ct.File, error) {
 	// Create a context (you might want to use a timeout context in a real application)
 	ctx := context.Background()
 
@@ -83,13 +110,12 @@ func GetAllDocuments(collection *mongo.Collection) ([]ct.FileVersion, error) {
 		return nil, err
 	}
 	defer cursor.Close(ctx)
-
 	// Create a slice to store the documents
-	var documents []ct.FileVersion
+	var documents []ct.File
 
 	// Iterate through the cursor and decode each document
 	for cursor.Next(ctx) {
-		var doc ct.FileVersion
+		var doc ct.File
 		if err := cursor.Decode(&doc); err != nil {
 			return nil, err
 		}

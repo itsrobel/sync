@@ -84,9 +84,10 @@ func (s *FileTransferServer) SendFileToServer(ctx context.Context, stream *conne
 	// manager.CreateFile()
 	res := connect.NewResponse(&ft.ActionResponse{Success: success, Message: message})
 	res.Header().Set("Transfer-Version", "v1")
-	collection := s.db.Database("sync").Collection("files")
-
-	manager.CreateFileVersion(collection, fileData)
+	database := s.db.Database("sync")
+	// TODO: I should do sync change comparision before uploading files
+	manager.CreateFileVersion(database, fileData)
+	manager.UpdateFile(database, &ct.File{Id: fileData.FileId, Location: fileData.Location, Content: string(fileData.Content), Active: true})
 
 	return res, nil
 }
@@ -169,6 +170,12 @@ func (s *FileTransferServer) Greet(
 	req *connect.Request[ft.GreetRequest],
 ) (*connect.Response[ft.GreetResponse], error) {
 	fmt.Println("response message: ", req.Msg.Name)
+	collection := s.db.Database("sync").Collection("files")
+
+	// manager.DeleteAllDocuments(collection)
+	manager.GetAllDocuments(collection)
+	// manager.DeleteAllDocuments(collection)
+
 	response := connect.NewResponse(&ft.GreetResponse{
 		Greeting: fmt.Sprintf("Hello, %s!", req.Msg.Name),
 	})
@@ -201,9 +208,6 @@ func (s *FileTransferServer) ControlStream(
 	}
 	log.Printf("Last sync time: %s, client: %s", lastSync, sessionID)
 	collection := s.db.Database("sync").Collection("files")
-
-	// manager.DeleteAllDocuments(collection)
-	manager.GetAllDocuments(collection)
 
 	filter := bson.M{
 		"timestamp": bson.M{"$gt": lastSync},
