@@ -7,9 +7,18 @@ plugins:
     out: internal/services
     opt:
       - paths=source_relative
-
   - remote: buf.build/protocolbuffers/go
     out: internal/services
+    opt:
+      - paths=source_relative
+
+  # web application
+  - remote: buf.build/connectrpc/go
+    out: web/internal/services
+    opt:
+      - paths=source_relative
+  - remote: buf.build/protocolbuffers/go
+    out: web/internal/services
     opt:
       - paths=source_relative
 

@@ -21,6 +21,7 @@ type File struct {
 // Every Hour if changes have been made create a new Version
 // Shouldn't the file just point to the latest version?
 type FileVersion struct {
+	Id        string    `bson:"id"`
 	Client    string    `bson:"client"`
 	Timestamp time.Time `bson:"timestamp"` // Time when this version was created
 	Location  string    `bson:"location"`  // File location
