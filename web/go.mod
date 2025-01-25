@@ -1,4 +1,4 @@
-module github.com/itsrobel/baby-backend
+module github.com/itsrobel/sync/web
 
 go 1.23.5
 

@@ -2,7 +2,7 @@ syntax = "proto3";
 package filetransfer;
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/itsrobel/sync/internal/services/filetransfer";
+option go_package = "github.com/itsrobel/sync/web/internal/services/web/filetransfer";
 
 service FileService {
   rpc ControlStream(stream ControlMessage) returns (stream ControlMessage) {};

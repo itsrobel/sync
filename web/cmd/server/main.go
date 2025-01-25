@@ -6,8 +6,8 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/itsrobel/baby-backend/internal/service"
-	"github.com/itsrobel/baby-backend/internal/services/filetransfer/filetransferconnect"
+	"github.com/itsrobel/sync/web/internal/service"
+	"github.com/itsrobel/sync/web/internal/services/web/filetransfer/filetransferconnect"
 
 	"github.com/rs/cors"
 	"golang.org/x/net/http2"
@@ -15,20 +15,6 @@ import (
 
 func main() {
 	mux := http.NewServeMux()
-
-	// Initialize HTTP client for internal gRPC calls
-
-	// client := apiv1connect.NewGreetServiceClient(
-	// 	&http.Client{
-	// 		Transport: &http2.Transport{
-	// 			AllowHTTP: true,
-	// 			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
-	// 				return net.Dial(network, addr)
-	// 			},
-	// 		},
-	// 	},
-	// 	"http://localhost:50051",
-	// )
 
 	client := filetransferconnect.NewFileServiceClient(
 		&http.Client{

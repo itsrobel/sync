@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/itsrobel/baby-backend/internal/services/filetransfer"
-	"github.com/itsrobel/baby-backend/internal/services/filetransfer/filetransferconnect"
-	"github.com/itsrobel/baby-backend/internal/templates"
+	"github.com/itsrobel/sync/web/internal/services/web/filetransfer"
+	"github.com/itsrobel/sync/web/internal/services/web/filetransfer/filetransferconnect"
+	"github.com/itsrobel/sync/web/internal/templates"
 
 	"connectrpc.com/connect"
 )
