@@ -162,6 +162,20 @@ func (s *FileTransferServer) getLastSyncTime(sessionID string) (time.Time, error
 	return session.LastSyncTime, err
 }
 
+// func (s *FileTransferServer) Greet()
+
+func (s *FileTransferServer) Greet(
+	ctx context.Context,
+	req *connect.Request[ft.GreetRequest],
+) (*connect.Response[ft.GreetResponse], error) {
+	fmt.Println("response message: ", req.Msg.Name)
+	response := connect.NewResponse(&ft.GreetResponse{
+		Greeting: fmt.Sprintf("Hello, %s!", req.Msg.Name),
+	})
+
+	return response, nil
+}
+
 func (s *FileTransferServer) ControlStream(
 	ctx context.Context,
 	stream *connect.BidiStream[ft.ControlMessage, ft.ControlMessage],

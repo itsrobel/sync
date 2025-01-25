@@ -215,6 +215,8 @@ the contents and the ID from the sql table
         better, to track what files, they don't have
         based on when they lasted connected via timestamps
 
+- [ ] make a rpc call on the web app that reads the latest list of files
+
 ### Bonus
 
 - [ ] The file_versions need to be diffs in a order that can than

@@ -6,8 +6,7 @@ option go_package = "github.com/itsrobel/sync/internal/services/filetransfer";
 service FileService {
   rpc ControlStream(stream ControlMessage) returns (stream ControlMessage) {};
   rpc SendFileToServer(stream FileVersionData) returns (ActionResponse) {};
-  //rpc DeleteFile(FileRequest) returns (ActionResponse);
-  //rpc MoveFile(MoveFileRequest) returns (ActionResponse);
+  rpc Greet(GreetRequest) returns (GreetResponse) {}
 }
 // TODO: I need to get file differences
 // TODO: add the directory watching to the grpc
@@ -47,5 +46,14 @@ message ControlMessage {
 message ActionResponse {
   bool success = 1;
   string message = 2;
+}
+
+
+message GreetRequest {
+  string name = 1;
+}
+
+message GreetResponse {
+  string greeting = 1;
 }
 
