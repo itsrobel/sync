@@ -5,12 +5,13 @@
 package filetransferconnect
 
 import (
-	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	filetransfer "github.com/itsrobel/sync/internal/services/filetransfer"
 	http "net/http"
 	strings "strings"
+
+	connect "connectrpc.com/connect"
+	filetransfer "github.com/itsrobel/baby-backend/internal/services/filetransfer"
 )
 
 // This is a compile-time assertion to ensure that this generated file and the connect package are

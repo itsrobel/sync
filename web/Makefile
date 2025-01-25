@@ -2,7 +2,6 @@
 .PHONY: generate build run setup-frontend dev
 
 generate:
-	buf generate
 	templ generate
 
 build: generate

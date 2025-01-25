@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	// ct "github.com/itsrobel/sync/internal/types"
+	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
 	"github.com/itsrobel/sync/internal/watcher"
 	// "io"
 	// "path/filepath"
