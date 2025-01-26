@@ -12,7 +12,7 @@ const (
 // NOTE: ID's are created by default
 // time?
 type File struct {
-	Id       string `bson:"id"`
+	ID       string `bson:"id"`
 	Location string `bson:"location"`
 	Content  string `bson:"contents"`
 	Active   bool   `bson:"active"` // this can decide whether or not to sync

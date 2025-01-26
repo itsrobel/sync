@@ -3,7 +3,6 @@ package watcher
 import (
 	"context"
 	"crypto/tls"
-	"database/sql"
 	"fmt"
 	"io"
 	"log"
@@ -23,13 +22,16 @@ import (
 	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
 	"github.com/itsrobel/sync/internal/sql_manager"
 	ct "github.com/itsrobel/sync/internal/types"
+
+	// ct "github.com/itsrobel/sync/internal/types"
 	"golang.org/x/net/http2"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 )
 
 type FileWatcher struct {
 	watcher       *fsnotify.Watcher
-	db            *sql.DB
+	db            *gorm.DB
 	wait          sync.WaitGroup
 	done          chan struct{}
 	client        filetransferconnect.FileServiceClient
@@ -180,7 +182,7 @@ func (fw *FileWatcher) startControlStream() error {
 }
 
 // NOTE: this now uploads via the information returned in the database
-func (fw *FileWatcher) file_upload(fileVersion *ct.FileVersion) error {
+func (fw *FileWatcher) file_upload(fileVersion *sql_manager.FileVersion) error {
 	log.Println("uploading file: ", fileVersion.Location)
 	if err := fw.sendControlMessage(&ft.ControlMessage{
 		SessionId: fw.sessionID,
@@ -208,9 +210,9 @@ func (fw *FileWatcher) file_upload(fileVersion *ct.FileVersion) error {
 
 		chunk := buffer[i:end]
 		if err := stream.Send(&ft.FileVersionData{
-			Id:        fileVersion.Id,
+			Id:        fileVersion.ID,
 			Location:  fileVersion.Location, // or any identifier you want to use
-			FileId:    fileVersion.FileId,   // or any identifier you want to use
+			FileId:    fileVersion.FileID,   // or any identifier you want to use
 			Timestamp: timestamppb.New(fileVersion.Timestamp),
 			Client:    fw.sessionID,
 			Content:   chunk,
@@ -290,9 +292,9 @@ func (fw *FileWatcher) processInitialFiles(watchPath string) error {
 	})
 }
 
-func (fw *FileWatcher) processFileContent(path string, file *ct.File) (*ct.FileVersion, error) {
+func (fw *FileWatcher) processFileContent(path string, file *sql_manager.File) (*sql_manager.FileVersion, error) {
 	raw_file, err := os.Open(path)
-	tmpFV := &ct.FileVersion{}
+	tmpFV := &sql_manager.FileVersion{}
 	if err != nil {
 		return tmpFV, err
 	}
@@ -351,7 +353,7 @@ func (fw *FileWatcher) startWatching(path string) error {
 }
 
 func (fw *FileWatcher) handleEvent(event fsnotify.Event) error {
-	if !sql_manager.ValidFileExtension(event.Name) {
+	if !ValidFileExtension(event.Name) {
 		return nil
 	}
 
@@ -385,6 +387,16 @@ func (fw *FileWatcher) handleEvent(event fsnotify.Event) error {
 	return nil
 }
 
+func ValidFileExtension(location string) bool {
+	extensions := []string{".md", ".pdf"}
+	for _, ext := range extensions {
+		if strings.HasSuffix(location, ext) {
+			return true
+		}
+	}
+	return false
+}
+
 func (fw *FileWatcher) Stop() {
 	if fw.done != nil {
 		close(fw.done)
@@ -393,7 +405,7 @@ func (fw *FileWatcher) Stop() {
 	if fw.watcher != nil {
 		fw.watcher.Close()
 	}
-	if fw.db != nil {
-		fw.db.Close()
-	}
+	// if fw.db != nil {
+	// 	fw.db.Close()
+	// }
 }

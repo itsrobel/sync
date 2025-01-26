@@ -9,22 +9,21 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	manager "github.com/itsrobel/sync/internal/mongo_manager"
+	manager "github.com/itsrobel/sync/internal/postgres_manager"
 	ft "github.com/itsrobel/sync/internal/services/filetransfer"
 	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
 	ct "github.com/itsrobel/sync/internal/types"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type FileTransferServer struct {
 	filetransferconnect.UnimplementedFileServiceHandler
 	sessions map[string]*SessionState
 	mu       sync.RWMutex
-	db       *mongo.Client
+	db       *gorm.DB
 }
 
 type SessionState struct {
@@ -32,38 +31,26 @@ type SessionState struct {
 	isPaused      bool
 }
 
-func NewFileTransferServer(db *mongo.Client) *FileTransferServer {
+type ClientSession struct {
+	SessionID    string `gorm:"primaryKey"`
+	LastSyncTime time.Time
+	IsActive     bool
+}
+
+func NewFileTransferServer(db *gorm.DB) *FileTransferServer {
 	return &FileTransferServer{
 		sessions: make(map[string]*SessionState),
 		db:       db,
 	}
 }
 
-func (s *FileTransferServer) setPauseState(sessionID string, isPaused bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if session, exists := s.sessions[sessionID]; exists {
-		session.isPaused = isPaused
-	}
-}
-
-func (s *FileTransferServer) isSessionPaused(sessionID string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if session, exists := s.sessions[sessionID]; exists {
-		return session.isPaused
-	}
-	return false
-}
-
-// Existing methods remain unchanged
 func (s *FileTransferServer) SendFileToServer(ctx context.Context, stream *connect.ClientStream[ft.FileVersionData]) (*connect.Response[ft.ActionResponse], error) {
 	success := true
 	message := "OK"
 	var fileData *ft.FileVersionData
+
 	log.Println("Request headers:", stream.RequestHeader())
 	for stream.Receive() {
-		// Store the latest message
 		fileData = stream.Msg()
 		log.Println("Processing chunk for file:", fileData.Id, fileData.Location)
 	}
@@ -80,40 +67,67 @@ func (s *FileTransferServer) SendFileToServer(ctx context.Context, stream *conne
 		}), fmt.Errorf("no data received")
 	}
 
-	// TODO: find by file if file location exits create version else create file
-	// manager.CreateFile()
 	res := connect.NewResponse(&ft.ActionResponse{Success: success, Message: message})
 	res.Header().Set("Transfer-Version", "v1")
-	database := s.db.Database("sync")
-	// TODO: I should do sync change comparision before uploading files
-	manager.CreateFileVersion(database, fileData)
-	manager.UpdateFile(database, &ct.File{Id: fileData.FileId, Location: fileData.Location, Content: string(fileData.Content), Active: true})
+
+	if err := manager.CreateFileVersion(s.db, fileData); err != nil {
+		return connect.NewResponse(&ft.ActionResponse{
+			Success: false,
+			Message: err.Error(),
+		}), err
+	}
+
+	if err := manager.UpdateFile(s.db, &ct.File{
+		ID:       fileData.FileId,
+		Location: fileData.Location,
+		Content:  string(fileData.Content),
+		Active:   true,
+	}); err != nil {
+		return connect.NewResponse(&ft.ActionResponse{
+			Success: false,
+			Message: err.Error(),
+		}), err
+	}
 
 	return res, nil
 }
 
-func ConnectMongo() (*mongo.Client, context.Context) {
-	// Set client options
-	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
-	// Connect to MongoDB
-	client, err := mongo.Connect(context.Background(), clientOptions)
+func ConnectDatabase() (*gorm.DB, error) {
+	// dsn := "host=localhost user=postgres password=yourpassword dbname=sync port=5432 sslmode=disable"
+	dsn := "host=localhost user=postgres password=postgres dbname=myapp port=5432 sslmode=disable"
+	// dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+	// 	os.Getenv("DB_HOST"),
+	// 	os.Getenv("DB_USER"),
+	// 	os.Getenv("DB_PASSWORD"),
+	// 	os.Getenv("DB_NAME"),
+	// 	os.Getenv("DB_PORT"),
+	// )
+	// log.Println(dsn)
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	// Check the connection
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err = client.Ping(ctx, nil)
-	if err != nil {
-		log.Fatal(err)
+
+	// Auto migrate the schemas
+	if err := manager.AutoMigrate(db); err != nil {
+		return nil, err
 	}
-	log.Println("Connected to MongoDB!")
-	return client, ctx
+
+	if err := db.AutoMigrate(&ClientSession{}); err != nil {
+		return nil, err
+	}
+	log.Println("Connected to Postgres ")
+	return db, nil
 }
 
 func main() {
-	mongoClient, _ := ConnectMongo()
-	filetransfer := NewFileTransferServer(mongoClient)
+	db, err := ConnectDatabase()
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+
+	filetransfer := NewFileTransferServer(db)
 
 	mux := http.NewServeMux()
 	path, handler := filetransferconnect.NewFileServiceHandler(filetransfer)
@@ -134,47 +148,65 @@ func main() {
 	}
 }
 
+// NOTE: if it is the clients first connection there is no sessionID to search for
 func (s *FileTransferServer) updateClientTimestamp(sessionID string) error {
-	collection := s.db.Database("sync").Collection("client_sessions")
-	filter := bson.M{"session_id": sessionID}
-	update := bson.M{
-		"$set": bson.M{
+	return s.db.Model(&ClientSession{}).
+		Where("session_id = ?", sessionID).
+		Updates(map[string]interface{}{
 			"last_sync_time": time.Now(),
 			"is_active":      true,
-		},
-	}
-	opts := options.Update().SetUpsert(true)
-
-	_, err := collection.UpdateOne(context.Background(), filter, update, opts)
-	return err
+		}).Error
 }
 
-func (s *FileTransferServer) getLastSyncTime(sessionID string) (time.Time, error) {
-	collection := s.db.Database("sync").Collection("client_sessions")
-	var session ct.ClientSession
-	err := collection.FindOne(
-		context.Background(),
-		bson.M{"session_id": sessionID},
-	).Decode(&session)
+// func (s *FileTransferServer) getOrCreateClientSession(sessionID string) (*ClientSession, error) {
+// 	var session ClientSession
+//
+// 	result := s.db.Where("session_id = ?", sessionID).First(&session)
+// 	if result.Error == gorm.ErrRecordNotFound {
+// 		// Create new session if not found
+// 		session = ClientSession{
+// 			SessionID:    sessionID,
+// 			LastSyncTime: time.Now(),
+// 			IsActive:     true,
+// 		}
+// 		if err := s.db.Create(&session).Error; err != nil {
+// 			return nil, fmt.Errorf("failed to create session: %v", err)
+// 		}
+// 	} else if result.Error != nil {
+// 		return nil, result.Error
+// 	}
+//
+// 	return &session, nil
+// }
 
-	if err == mongo.ErrNoDocuments {
+func (s *FileTransferServer) getLastSyncTime(sessionID string) (time.Time, error) {
+	var session ClientSession
+	err := s.db.Where("session_id = ?", sessionID).First(&session).Error
+	if err == gorm.ErrRecordNotFound {
+		session = ClientSession{
+			SessionID:    sessionID,
+			LastSyncTime: time.Now(),
+			IsActive:     true,
+		}
+		if err := s.db.Create(&session).Error; err != nil {
+			return time.Time{}, fmt.Errorf("failed to create session: %v", err)
+		}
 		return time.Time{}, nil
 	}
 	return session.LastSyncTime, err
 }
-
-// func (s *FileTransferServer) Greet()
 
 func (s *FileTransferServer) Greet(
 	ctx context.Context,
 	req *connect.Request[ft.GreetRequest],
 ) (*connect.Response[ft.GreetResponse], error) {
 	fmt.Println("response message: ", req.Msg.Name)
-	collection := s.db.Database("sync").Collection("files")
 
-	// manager.DeleteAllDocuments(collection)
-	manager.GetAllDocuments(collection)
-	// manager.DeleteAllDocuments(collection)
+	docs, err := manager.GetAllDocuments(s.db)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("Found %d documents", len(docs))
 
 	response := connect.NewResponse(&ft.GreetResponse{
 		Greeting: fmt.Sprintf("Hello, %s!", req.Msg.Name),
@@ -188,42 +220,31 @@ func (s *FileTransferServer) ControlStream(
 	stream *connect.BidiStream[ft.ControlMessage, ft.ControlMessage],
 ) error {
 	msg, err := stream.Receive()
-	log.Println(msg)
 	if err != nil {
 		return err
 	}
 
 	sessionID := msg.SessionId
 
-	// Send READY response first
 	if err := stream.Send(&ft.ControlMessage{
 		SessionId: sessionID,
 		Type:      ft.ControlMessage_READY,
 	}); err != nil {
 		return err
 	}
-	lastSync, err := s.getLastSyncTime(sessionID)
-	if err != nil {
-		return err
-	}
+
+	lastSync, _ := s.getLastSyncTime(sessionID)
+	// if err != nil {
+	// 	return err
+	// }
 	log.Printf("Last sync time: %s, client: %s", lastSync, sessionID)
-	collection := s.db.Database("sync").Collection("files")
 
-	filter := bson.M{
-		"timestamp": bson.M{"$gt": lastSync},
-		"active":    true,
-	}
-
-	cursor, err := collection.Find(ctx, filter)
-	if err != nil {
+	var files []ct.File
+	if err := s.db.Where("timestamp > ? AND active = ?", lastSync, true).Find(&files).Error; err != nil {
 		return err
 	}
-	defer cursor.Close(ctx)
-	for cursor.Next(ctx) {
-		var file ct.File
-		if err := cursor.Decode(&file); err != nil {
-			continue
-		}
+
+	for _, file := range files {
 		if err := stream.Send(&ft.ControlMessage{
 			SessionId: sessionID,
 			Type:      ft.ControlMessage_NEW_FILE,
@@ -232,9 +253,11 @@ func (s *FileTransferServer) ControlStream(
 			return err
 		}
 	}
+
 	if err := s.updateClientTimestamp(sessionID); err != nil {
 		return err
 	}
+
 	for {
 		msg, err := stream.Receive()
 		log.Println(msg)

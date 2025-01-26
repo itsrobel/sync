@@ -53,7 +53,7 @@ func CreateFileVersion(database *mongo.Database, file *ft.FileVersionData) {
 
 func UpdateFile(database *mongo.Database, file *ct.File) error {
 	collection := database.Collection("files")
-	filter := bson.M{"id": file.Id}
+	filter := bson.M{"id": file.ID}
 
 	update := bson.M{
 		"$set": bson.M{
@@ -65,11 +65,10 @@ func UpdateFile(database *mongo.Database, file *ct.File) error {
 
 	opts := options.Update().SetUpsert(true)
 	_, err := collection.UpdateOne(context.TODO(), filter, update, opts)
-	log.Printf("Updated document with ID: %s at %s, to the content: %s", file.Id, file.Location, file.Content)
+	log.Printf("Updated document with ID: %s at %s, to the content: %s", file.ID, file.Location, file.Content)
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
