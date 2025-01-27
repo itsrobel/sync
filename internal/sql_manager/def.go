@@ -1,18 +1,43 @@
 package sql_manager
 
-import "time"
+import (
+	"time"
 
-type File struct {
-	ID       string `gorm:"primaryKey;type:text;default:lower(hex(randomblob(16)))"`
-	Location string `gorm:"unique"`
-	Content  string
-	Active   bool
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+const (
+	Directory = "content"
+	ChunkSize = 64 * 1024
+)
+
+type FileBase struct {
+	ID string `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 }
 
+type File struct {
+	FileBase
+	Active   bool
+	Location string
+	Content  string
+}
 type FileVersion struct {
-	ID        string `gorm:"primaryKey;type:text;default:lower(hex(randomblob(16)))"`
+	FileBase
 	Timestamp time.Time
+	Client    string
 	Location  string
 	Content   string
-	FileID    string
+	FileID    string `gorm:"type:uuid"`
+}
+
+type ClientSession struct {
+	SessionID    string `gorm:"primaryKey"`
+	LastSyncTime time.Time
+	IsActive     bool
+}
+
+func (f *FileBase) BeforeCreate(tx *gorm.DB) (err error) {
+	f.ID = uuid.New().String()
+	return
 }

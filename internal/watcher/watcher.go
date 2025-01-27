@@ -21,7 +21,6 @@ import (
 	ft "github.com/itsrobel/sync/internal/services/filetransfer"
 	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
 	"github.com/itsrobel/sync/internal/sql_manager"
-	ct "github.com/itsrobel/sync/internal/types"
 
 	// ct "github.com/itsrobel/sync/internal/types"
 	"golang.org/x/net/http2"
@@ -77,10 +76,12 @@ func InitFileWatcher(dbPath, watchPath, clientName string) (*FileWatcher, error)
 	// Start the connection ticker
 
 	// Process initial files regardless of connection status
+	log.Println("processInitialFiles")
 	if err := fw.processInitialFiles(watchPath); err != nil {
 		return nil, err
 	}
 
+	log.Println("startWatching")
 	if err := fw.startWatching(watchPath); err != nil {
 		return nil, err
 	}
@@ -200,7 +201,7 @@ func (fw *FileWatcher) file_upload(fileVersion *sql_manager.FileVersion) error {
 
 	stream := fw.client.SendFileToServer(context.Background())
 	buffer := []byte(fileVersion.Content)
-	chunkSize := ct.ChunkSize
+	chunkSize := sql_manager.ChunkSize
 
 	for i := 0; i < len(buffer); i += chunkSize {
 		end := i + chunkSize
@@ -261,16 +262,17 @@ func (fw *FileWatcher) processInitialFiles(watchPath string) error {
 		if path != watchPath {
 			// TODO: find files by location is likely broken
 			file, err := sql_manager.FindFileByLocation(fw.db, path)
-			if err != nil {
-				return err
-			}
-			if file == nil {
+
+			if err == gorm.ErrRecordNotFound {
 				var err error
 				file, err = sql_manager.CreateFileInitial(fw.db, path)
 				if err != nil {
 					return fmt.Errorf("failed to create file record: %w", err)
 				}
 				log.Printf("Created new file record: %s", path)
+
+			} else {
+				return err
 			}
 
 			// TODO: have proccesfilecontent return file to then upload

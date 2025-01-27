@@ -9,13 +9,11 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	manager "github.com/itsrobel/sync/internal/postgres_manager"
 	ft "github.com/itsrobel/sync/internal/services/filetransfer"
 	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
-	ct "github.com/itsrobel/sync/internal/types"
+	sql_manager "github.com/itsrobel/sync/internal/sql_manager"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -29,12 +27,6 @@ type FileTransferServer struct {
 type SessionState struct {
 	controlStream *connect.BidiStream[ft.ControlMessage, ft.ControlMessage]
 	isPaused      bool
-}
-
-type ClientSession struct {
-	SessionID    string `gorm:"primaryKey"`
-	LastSyncTime time.Time
-	IsActive     bool
 }
 
 func NewFileTransferServer(db *gorm.DB) *FileTransferServer {
@@ -70,15 +62,15 @@ func (s *FileTransferServer) SendFileToServer(ctx context.Context, stream *conne
 	res := connect.NewResponse(&ft.ActionResponse{Success: success, Message: message})
 	res.Header().Set("Transfer-Version", "v1")
 
-	if err := manager.CreateFileVersion(s.db, fileData); err != nil {
+	if err := sql_manager.CreateFileVersionServer(s.db, fileData); err != nil {
 		return connect.NewResponse(&ft.ActionResponse{
 			Success: false,
 			Message: err.Error(),
 		}), err
 	}
 
-	if err := manager.UpdateFile(s.db, &ct.File{
-		ID:       fileData.FileId,
+	if err := sql_manager.UpdateFileServer(s.db, &sql_manager.File{
+		// FileBase: sql_manager.FileBase{ID: fileData.Id},
 		Location: fileData.Location,
 		Content:  string(fileData.Content),
 		Active:   true,
@@ -92,37 +84,8 @@ func (s *FileTransferServer) SendFileToServer(ctx context.Context, stream *conne
 	return res, nil
 }
 
-func ConnectDatabase() (*gorm.DB, error) {
-	// dsn := "host=localhost user=postgres password=yourpassword dbname=sync port=5432 sslmode=disable"
-	dsn := "host=localhost user=postgres password=postgres dbname=myapp port=5432 sslmode=disable"
-	// dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
-	// 	os.Getenv("DB_HOST"),
-	// 	os.Getenv("DB_USER"),
-	// 	os.Getenv("DB_PASSWORD"),
-	// 	os.Getenv("DB_NAME"),
-	// 	os.Getenv("DB_PORT"),
-	// )
-	// log.Println(dsn)
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		return nil, err
-	}
-
-	// Auto migrate the schemas
-	if err := manager.AutoMigrate(db); err != nil {
-		return nil, err
-	}
-
-	if err := db.AutoMigrate(&ClientSession{}); err != nil {
-		return nil, err
-	}
-	log.Println("Connected to Postgres ")
-	return db, nil
-}
-
 func main() {
-	db, err := ConnectDatabase()
+	db, err := sql_manager.ConnectPostgres()
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
@@ -150,7 +113,7 @@ func main() {
 
 // NOTE: if it is the clients first connection there is no sessionID to search for
 func (s *FileTransferServer) updateClientTimestamp(sessionID string) error {
-	return s.db.Model(&ClientSession{}).
+	return s.db.Model(&sql_manager.ClientSession{}).
 		Where("session_id = ?", sessionID).
 		Updates(map[string]interface{}{
 			"last_sync_time": time.Now(),
@@ -158,32 +121,11 @@ func (s *FileTransferServer) updateClientTimestamp(sessionID string) error {
 		}).Error
 }
 
-// func (s *FileTransferServer) getOrCreateClientSession(sessionID string) (*ClientSession, error) {
-// 	var session ClientSession
-//
-// 	result := s.db.Where("session_id = ?", sessionID).First(&session)
-// 	if result.Error == gorm.ErrRecordNotFound {
-// 		// Create new session if not found
-// 		session = ClientSession{
-// 			SessionID:    sessionID,
-// 			LastSyncTime: time.Now(),
-// 			IsActive:     true,
-// 		}
-// 		if err := s.db.Create(&session).Error; err != nil {
-// 			return nil, fmt.Errorf("failed to create session: %v", err)
-// 		}
-// 	} else if result.Error != nil {
-// 		return nil, result.Error
-// 	}
-//
-// 	return &session, nil
-// }
-
 func (s *FileTransferServer) getLastSyncTime(sessionID string) (time.Time, error) {
-	var session ClientSession
+	var session sql_manager.ClientSession
 	err := s.db.Where("session_id = ?", sessionID).First(&session).Error
 	if err == gorm.ErrRecordNotFound {
-		session = ClientSession{
+		session = sql_manager.ClientSession{
 			SessionID:    sessionID,
 			LastSyncTime: time.Now(),
 			IsActive:     true,
@@ -202,10 +144,12 @@ func (s *FileTransferServer) Greet(
 ) (*connect.Response[ft.GreetResponse], error) {
 	fmt.Println("response message: ", req.Msg.Name)
 
-	docs, err := manager.GetAllDocuments(s.db)
+	docs, err := sql_manager.GetAllFiles(s.db)
 	if err != nil {
 		return nil, err
 	}
+
+	// manager.GetAllDocumentsVersions(s.db)
 	log.Printf("Found %d documents", len(docs))
 
 	response := connect.NewResponse(&ft.GreetResponse{
@@ -239,7 +183,7 @@ func (s *FileTransferServer) ControlStream(
 	// }
 	log.Printf("Last sync time: %s, client: %s", lastSync, sessionID)
 
-	var files []ct.File
+	var files []sql_manager.File
 	if err := s.db.Where("timestamp > ? AND active = ?", lastSync, true).Find(&files).Error; err != nil {
 		return err
 	}
