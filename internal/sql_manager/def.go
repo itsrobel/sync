@@ -38,6 +38,8 @@ type ClientSession struct {
 }
 
 func (f *FileBase) BeforeCreate(tx *gorm.DB) (err error) {
-	f.ID = uuid.New().String()
+	if f.ID == "" {
+		f.ID = uuid.New().String()
+	}
 	return
 }

@@ -76,6 +76,10 @@ func ConnectPostgres() (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to drop tables: %v", err)
 	}
 
+	// if err := db.Migrator().DropIndex(&File{}, "idx_files_location"); err != nil {
+	// 	return nil, fmt.Errorf("failed to drop tables: %v", err)
+	// }
+
 	// Migrate all models at once
 	if err := db.AutoMigrate(
 		&ClientSession{},
@@ -88,8 +92,4 @@ func ConnectPostgres() (*gorm.DB, error) {
 
 	log.Println("Successfully connected to PostgreSQL database")
 	return db, nil
-}
-
-func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(&File{}, &FileVersion{})
 }

@@ -60,10 +60,12 @@ func CreateFileVersionServer(db *gorm.DB, file *ft.FileVersionData) error {
 func UpdateFileServer(db *gorm.DB, file *File) error {
 	var existingFile File
 
+	log.Printf("Trying to update file with ID :%s", file.ID)
 	result := db.Where("id = ?", file.ID).First(&existingFile)
 	if result.Error == gorm.ErrRecordNotFound {
 		// Create new file if not found
 		newFile := File{
+			FileBase: FileBase{ID: file.ID},
 			Location: file.Location,
 			Content:  file.Content,
 			Active:   file.Active,
@@ -125,6 +127,10 @@ func GetAllFileVersions(db *gorm.DB, fileID string) ([]FileVersion, error) {
 	return versions, err
 }
 
-func DeleteAllDocuments(db *gorm.DB) error {
+func DeleteAllFiles(db *gorm.DB) error {
 	return db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&File{}).Error
+}
+
+func DeleteAllFileVersions(db *gorm.DB) error {
+	return db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&FileVersion{}).Error
 }

@@ -70,7 +70,7 @@ func (s *FileTransferServer) SendFileToServer(ctx context.Context, stream *conne
 	}
 
 	if err := sql_manager.UpdateFileServer(s.db, &sql_manager.File{
-		// FileBase: sql_manager.FileBase{ID: fileData.Id},
+		FileBase: sql_manager.FileBase{ID: fileData.FileId},
 		Location: fileData.Location,
 		Content:  string(fileData.Content),
 		Active:   true,
@@ -90,6 +90,8 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
+	sql_manager.DeleteAllFiles(db)
+	sql_manager.DeleteAllFileVersions(db)
 	filetransfer := NewFileTransferServer(db)
 
 	mux := http.NewServeMux()
@@ -151,6 +153,7 @@ func (s *FileTransferServer) Greet(
 
 	// manager.GetAllDocumentsVersions(s.db)
 	log.Printf("Found %d documents", len(docs))
+	log.Println(docs)
 
 	response := connect.NewResponse(&ft.GreetResponse{
 		Greeting: fmt.Sprintf("Hello, %s!", req.Msg.Name),
