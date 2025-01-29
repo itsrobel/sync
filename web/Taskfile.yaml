@@ -3,12 +3,14 @@ version: "3"
 tasks:
   dev:
     cmds:
-      - bun run build
+      - bun run build:css
+      - bun run build:js
       - templ generate
       - go run cmd/server/main.go
   build:
     cmds:
-      - bun run build
+      - bun run build:css
+      - bun run build:js
       - templ generate
       - go build -o ./bin/app cmd/server/main.go
 
