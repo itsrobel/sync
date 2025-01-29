@@ -33,6 +33,7 @@ func main() {
 
 	// Routes
 	mux.HandleFunc("/", handlers.Index)
+	mux.HandleFunc("/edit", handlers.HandleEditor)
 	mux.HandleFunc("/greet", handlers.HandleGreet)
 
 	// Serve static files

@@ -3,7 +3,7 @@ package templates
 
 import "github.com/itsrobel/sync/web/internal/types"
 
-templ Index(FileList []types.File) {
+templ Index() {
 	@Layout("Home") {
 		<div class="max-w-md mx-auto">
 			<form class="space-y-4" hx-post="/greet" hx-target="#greeting" hx-swap="innerHTML">
@@ -18,7 +18,7 @@ templ Index(FileList []types.File) {
 				</button>
 			</form>
 			<div id="greeting" class="mt-4 text-center"></div>
-			@FileDrawer(FileList)
+			<!-- @FileDrawer(FileList) -->
 		</div>
 	}
 }

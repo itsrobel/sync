@@ -1,0 +1,21 @@
+package templates 
+
+// type EditorConfig struct {
+// 	ID       string
+// 	SavePath string
+// 	Content  string
+// }
+//
+templ Editor() {
+	<!DOCTYPE html>
+	<div>
+		<script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@2.19.0/dist/editor.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/gh/mdgaziur/EditorJS-LaTeX@latest/dist/editorjs-latex.bundle-min.js"></script>
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mdgaziur/EditorJS-LaTeX@latest/dist/editorjs-latex.bundle.min.css"/>
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.12.0/katex.min.css"/>
+		<div class="container">
+			<div id="editor"></div>
+		</div>
+		<script type="module" src="/assets/js/editor.js"></script>
+	</div>
+}

@@ -51,3 +51,31 @@ func (h *Handlers) HandleGreet(w http.ResponseWriter, r *http.Request) {
 	component := templates.GreetingResponse(resp.Msg.Greeting)
 	component.Render(r.Context(), w)
 }
+
+func (h *Handlers) HandleEditor(w http.ResponseWriter, r *http.Request) {
+	component := templates.Editor()
+
+	// Render the component
+	component.Render(context.Background(), w)
+}
+
+// func BlogHandler(c *gin.Context) {
+// 	page := c.Param("page") + ".md"
+// 	// blog, err := os.ReadFile(filepath.Join("blog", page))
+// 	blog, err := os.ReadFile(filepath.Join(blogDir, page))
+// 	var htmlBlog string
+// 	if err != nil {
+// 		// TODO: I should make an actual page for this later c.String(http.StatusNotFound, "Page not found")
+// 		htmlBlog = "Page not found"
+// 	} else {
+// 		htmlBlog = string(blackfriday.Run(blog,
+// 			blackfriday.WithExtensions(blackfriday.CommonExtensions|blackfriday.AutoHeadingIDs),
+// 		))
+// 	}
+//
+// 	// Render the template with the HTML blog
+// 	c.Writer.Header().Set("Content-Type", "text/html")
+// 	// Pass the HTML blog as templ.HTML type
+// 	templates.BlogPage(htmlBlog).Render(c.Request.Context(), c.Writer)
+// }
+//
