@@ -1,0 +1,36 @@
+version: "3"
+
+tasks:
+  dev:
+    cmds:
+      - bun run build
+      - templ generate
+      - go run cmd/server/main.go
+  build:
+    cmds:
+      - bun run build
+      - templ generate
+      - go build -o ./bin/app cmd/server/main.go
+
+    desc: "Build the Go project"
+  #TODO: Make tests later
+  # test:
+  #   cmds:
+  #     - go test ./...
+  #   desc: "Run tests"
+
+  docker-build:
+    cmds:
+      - docker build -t sync_web .
+  docker-run:
+    cmds:
+      - docker run -d -p 80:8080 --name sync_web_container sync_web
+  lint:
+    cmds:
+      - golangci-lint run
+    desc: "Lint the code"
+
+  clean:
+    cmds:
+      - rm -rf myapp
+    desc: "Clean the build artifacts"

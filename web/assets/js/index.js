@@ -26238,7 +26238,7 @@ class G3 {
   }
 }
 
-// src/editor.js
+// client/index.js
 var import_editorjs_drag_drop = __toESM(require_bundle(), 1);
 var import_editorjs_undo = __toESM(require_bundle2(), 1);
 
@@ -26868,9 +26868,9 @@ class F3 {
   }
 }
 
-// src/editor.js
+// client/index.js
 var import_editorjs_paragraph_with_alignment = __toESM(require_bundle3(), 1);
-var EJLaTeX = require_src();
+var import_editorjs_latex = __toESM(require_src(), 1);
 var editor = new Aa({
   holder: "editor",
   onReady: () => {
@@ -26879,7 +26879,7 @@ var editor = new Aa({
   },
   tools: {
     Math: {
-      class: EJLaTeX,
+      class: import_editorjs_latex.default,
       shortcut: "CMD+SHIFT+L",
       inlineToolbar: true,
       config: {

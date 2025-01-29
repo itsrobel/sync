@@ -72,9 +72,9 @@ func ConnectPostgres() (*gorm.DB, error) {
 	}
 
 	// Drop existing tables
-	if err := db.Migrator().DropTable(&FileVersion{}); err != nil {
-		return nil, fmt.Errorf("failed to drop tables: %v", err)
-	}
+	// if err := db.Migrator().DropTable(&FileVersion{}); err != nil {
+	// 	return nil, fmt.Errorf("failed to drop tables: %v", err)
+	// }
 
 	// if err := db.Migrator().DropIndex(&File{}, "idx_files_location"); err != nil {
 	// 	return nil, fmt.Errorf("failed to drop tables: %v", err)

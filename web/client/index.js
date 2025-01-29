@@ -7,7 +7,7 @@ import Undo from "editorjs-undo";
 import Table from "@editorjs/table";
 import Paragraph from "editorjs-paragraph-with-alignment";
 // import LinkTool from "@editorjs/link";
-const EJLaTeX = require("editorjs-latex");
+import EJLaTeX from "editorjs-latex";
 const editor = new EditorJS({
   holder: "editor",
   onReady: () => {
