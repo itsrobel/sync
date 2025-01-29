@@ -3,8 +3,8 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "build:css": "bunx tailwindcss -i client/app.css -o ./assets/css/main.css",
-    "build:js": "bun build ./client/index.js --outdir ./assets/js/"
+    "build:css": "bunx tailwindcss -i ./web/assets/app.css -o ./web/public/css/main.css",
+    "build:js": "bun build ./web/assets/index.js --outdir ./web/public/js/"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.10",

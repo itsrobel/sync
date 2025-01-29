@@ -1,5 +1,7 @@
 *.db
 bin/
-*/node_modules/
-*/assets/css/main.css
-*/assets/js/index.js
+node_modules/
+web/public/css/main.css
+web/public/js/index.js
+
+*/templates/*_templ.go

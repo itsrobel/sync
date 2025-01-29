@@ -24,7 +24,7 @@ func main() {
 func test() {
 	// Set up paths
 	dbPath := "./sync-test.db"
-	watchPath := "./content-test"
+	watchPath := "./content"
 	clientName := "test-2"
 
 	// Ensure content directory exists

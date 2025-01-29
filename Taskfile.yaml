@@ -1,16 +1,18 @@
 version: "3"
 
 tasks:
-  server-dev:
+  dev-web:
     cmds:
-      - go run ./cmd/server/main.go
-  client-dev:
+      - bun run build:css
+      - bun run build:js
+      - templ generate
+      - go run cmd/web/main.go
+  build-web:
     cmds:
-      - go run ./cmd/client/main.go
-  build:
-    cmds:
-      - go build -o ./bin/client ./cmd/client
-      - go build -o ./bin/server ./cmd/server
+      - bun run build:css
+      - bun run build:js
+      - templ generate
+      - go build -o ./bin/web cmd/web/main.go
 
     desc: "Build the Go project"
   #TODO: Make tests later
@@ -21,10 +23,10 @@ tasks:
 
   docker-build:
     cmds:
-      - docker build -t sync .
+      - docker build -t sync_web .
   docker-run:
     cmds:
-      - docker run -d -p 80:8080 --name sync_container sync
+      - docker run -d -p 80:8080 --name sync_web_container sync_web
   lint:
     cmds:
       - golangci-lint run

@@ -6,8 +6,8 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/itsrobel/sync/web/internal/service"
-	"github.com/itsrobel/sync/web/internal/services/web/filetransfer/filetransferconnect"
+	"github.com/itsrobel/sync/internal/handlers"
+	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
 
 	"github.com/rs/cors"
 	"golang.org/x/net/http2"
@@ -29,7 +29,7 @@ func main() {
 	)
 
 	// Initialize handlers
-	handlers := service.NewHandlers(client)
+	handlers := handlers.NewHandlers(client)
 
 	// Routes
 	mux.HandleFunc("/", handlers.Index)
@@ -37,8 +37,8 @@ func main() {
 	mux.HandleFunc("/greet", handlers.HandleGreet)
 
 	// Serve static files
-	fs := http.FileServer(http.Dir("assets"))
-	mux.Handle("/assets/", http.StripPrefix("/assets/", fs))
+	fs := http.FileServer(http.Dir("web"))
+	mux.Handle("/web/", http.StripPrefix("/web/", fs))
 
 	// Configure CORS
 	corsHandler := cors.New(cors.Options{

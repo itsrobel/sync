@@ -219,6 +219,9 @@ the contents and the ID from the sql table
 - [ ] Re structure the project so that there is only one copy of each file in "files" that is
       updated on client writes to the latest version
 
+- [ ] restructure the application for max code re use among each client and server
+  - [ ] basically put each exe in cmd and everything else in internal
+
 ### Bonus
 
 - [ ] The file_versions need to be diffs in a order that can than

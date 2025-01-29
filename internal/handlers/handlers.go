@@ -1,4 +1,4 @@
-package service
+package handlers
 
 import (
 	// "baby-backend/internal/services/apiv1"
@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/itsrobel/sync/web/internal/services/web/filetransfer"
-	"github.com/itsrobel/sync/web/internal/services/web/filetransfer/filetransferconnect"
-	"github.com/itsrobel/sync/web/internal/templates"
+	"github.com/itsrobel/sync/internal/services/filetransfer"
+	"github.com/itsrobel/sync/internal/services/filetransfer/filetransferconnect"
+	"github.com/itsrobel/sync/internal/templates"
 
 	"connectrpc.com/connect"
 )

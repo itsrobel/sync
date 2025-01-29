@@ -1,7 +1,7 @@
 
 package templates
 
-import "github.com/itsrobel/sync/web/internal/types"
+import "github.com/itsrobel/sync/internal/sql_manager"
 
 templ Index() {
 	@Layout("Home") {
@@ -23,7 +23,7 @@ templ Index() {
 	}
 }
 
-templ FileItem(file types.File) {
+templ FileItem(file sql_manager.File) {
 	<li>
 		<h1 class="hidden md:block">
 			{ file.Location }
@@ -31,7 +31,7 @@ templ FileItem(file types.File) {
 	</li>
 }
 
-templ FileDrawer(FileList []types.File) {
+templ FileDrawer(FileList []sql_manager.File) {
 	<h2 class="card-title">Files</h2>
 	<ul class="max-h-80 menu bg-base-200 w-full rounded-box overflow-y-scroll scrollbar-hide">
 		for _, file := range FileList {
