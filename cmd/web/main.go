@@ -35,6 +35,8 @@ func main() {
 	mux.HandleFunc("/", handlers.Index)
 	mux.HandleFunc("/edit", handlers.HandleEditor)
 	mux.HandleFunc("/greet", handlers.HandleGreet)
+	// mux.HandleFunc("/greet", handlers.HandleGreet)
+	// mux.HandleFunc("/draw", handlers.HandleDraw)
 
 	// Serve static files
 	fs := http.FileServer(http.Dir("web"))

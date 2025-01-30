@@ -5,12 +5,16 @@ tasks:
     cmds:
       - bun run build:css
       - bun run build:js
+      - bun run build:jsx
+      - buf generate
       - templ generate
       - go run cmd/web/main.go
   build-web:
     cmds:
       - bun run build:css
       - bun run build:js
+      - bun run build:jsx
+      - buf generate
       - templ generate
       - go build -o ./bin/web cmd/web/main.go
 

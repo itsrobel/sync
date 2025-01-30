@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build:css": "bunx tailwindcss -i ./web/assets/app.css -o ./web/public/css/main.css",
-    "build:js": "bun build ./web/assets/index.js --outdir ./web/public/js/"
+    "build:js": "bun build ./web/assets/edit.js --outdir ./web/public/js/",
+    "build:jsx": "bun build ./web/assets/draw.js --outdir ./web/public/js/"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.10",
@@ -19,10 +20,13 @@
     "@editorjs/list": "^2.0.4",
     "@editorjs/quote": "^2.7.6",
     "@editorjs/table": "^2.4.3",
+    "@excalidraw/excalidraw": "^0.17.6",
     "@tailwindcss/cli": "^4.0.0",
     "editorjs-drag-drop": "^1.1.16",
     "editorjs-latex": "^1.0.5",
     "editorjs-paragraph-with-alignment": "^3.0.0",
-    "editorjs-undo": "^2.0.28"
+    "editorjs-undo": "^2.0.28",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }

@@ -41,6 +41,9 @@ const (
 	FileServiceSendFileToServerProcedure = "/filetransfer.FileService/SendFileToServer"
 	// FileServiceGreetProcedure is the fully-qualified name of the FileService's Greet RPC.
 	FileServiceGreetProcedure = "/filetransfer.FileService/Greet"
+	// FileServiceRetrieveListOfFilesProcedure is the fully-qualified name of the FileService's
+	// RetrieveListOfFiles RPC.
+	FileServiceRetrieveListOfFilesProcedure = "/filetransfer.FileService/RetrieveListOfFiles"
 )
 
 // FileServiceClient is a client for the filetransfer.FileService service.
@@ -48,6 +51,7 @@ type FileServiceClient interface {
 	ControlStream(context.Context) *connect.BidiStreamForClient[filetransfer.ControlMessage, filetransfer.ControlMessage]
 	SendFileToServer(context.Context) *connect.ClientStreamForClient[filetransfer.FileVersionData, filetransfer.ActionResponse]
 	Greet(context.Context, *connect.Request[filetransfer.GreetRequest]) (*connect.Response[filetransfer.GreetResponse], error)
+	RetrieveListOfFiles(context.Context, *connect.Request[filetransfer.ActionRequest]) (*connect.Response[filetransfer.FileList], error)
 }
 
 // NewFileServiceClient constructs a client for the filetransfer.FileService service. By default, it
@@ -79,14 +83,21 @@ func NewFileServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(fileServiceMethods.ByName("Greet")),
 			connect.WithClientOptions(opts...),
 		),
+		retrieveListOfFiles: connect.NewClient[filetransfer.ActionRequest, filetransfer.FileList](
+			httpClient,
+			baseURL+FileServiceRetrieveListOfFilesProcedure,
+			connect.WithSchema(fileServiceMethods.ByName("RetrieveListOfFiles")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // fileServiceClient implements FileServiceClient.
 type fileServiceClient struct {
-	controlStream    *connect.Client[filetransfer.ControlMessage, filetransfer.ControlMessage]
-	sendFileToServer *connect.Client[filetransfer.FileVersionData, filetransfer.ActionResponse]
-	greet            *connect.Client[filetransfer.GreetRequest, filetransfer.GreetResponse]
+	controlStream       *connect.Client[filetransfer.ControlMessage, filetransfer.ControlMessage]
+	sendFileToServer    *connect.Client[filetransfer.FileVersionData, filetransfer.ActionResponse]
+	greet               *connect.Client[filetransfer.GreetRequest, filetransfer.GreetResponse]
+	retrieveListOfFiles *connect.Client[filetransfer.ActionRequest, filetransfer.FileList]
 }
 
 // ControlStream calls filetransfer.FileService.ControlStream.
@@ -104,11 +115,17 @@ func (c *fileServiceClient) Greet(ctx context.Context, req *connect.Request[file
 	return c.greet.CallUnary(ctx, req)
 }
 
+// RetrieveListOfFiles calls filetransfer.FileService.RetrieveListOfFiles.
+func (c *fileServiceClient) RetrieveListOfFiles(ctx context.Context, req *connect.Request[filetransfer.ActionRequest]) (*connect.Response[filetransfer.FileList], error) {
+	return c.retrieveListOfFiles.CallUnary(ctx, req)
+}
+
 // FileServiceHandler is an implementation of the filetransfer.FileService service.
 type FileServiceHandler interface {
 	ControlStream(context.Context, *connect.BidiStream[filetransfer.ControlMessage, filetransfer.ControlMessage]) error
 	SendFileToServer(context.Context, *connect.ClientStream[filetransfer.FileVersionData]) (*connect.Response[filetransfer.ActionResponse], error)
 	Greet(context.Context, *connect.Request[filetransfer.GreetRequest]) (*connect.Response[filetransfer.GreetResponse], error)
+	RetrieveListOfFiles(context.Context, *connect.Request[filetransfer.ActionRequest]) (*connect.Response[filetransfer.FileList], error)
 }
 
 // NewFileServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -136,6 +153,12 @@ func NewFileServiceHandler(svc FileServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(fileServiceMethods.ByName("Greet")),
 		connect.WithHandlerOptions(opts...),
 	)
+	fileServiceRetrieveListOfFilesHandler := connect.NewUnaryHandler(
+		FileServiceRetrieveListOfFilesProcedure,
+		svc.RetrieveListOfFiles,
+		connect.WithSchema(fileServiceMethods.ByName("RetrieveListOfFiles")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/filetransfer.FileService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case FileServiceControlStreamProcedure:
@@ -144,6 +167,8 @@ func NewFileServiceHandler(svc FileServiceHandler, opts ...connect.HandlerOption
 			fileServiceSendFileToServerHandler.ServeHTTP(w, r)
 		case FileServiceGreetProcedure:
 			fileServiceGreetHandler.ServeHTTP(w, r)
+		case FileServiceRetrieveListOfFilesProcedure:
+			fileServiceRetrieveListOfFilesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -163,4 +188,8 @@ func (UnimplementedFileServiceHandler) SendFileToServer(context.Context, *connec
 
 func (UnimplementedFileServiceHandler) Greet(context.Context, *connect.Request[filetransfer.GreetRequest]) (*connect.Response[filetransfer.GreetResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("filetransfer.FileService.Greet is not implemented"))
+}
+
+func (UnimplementedFileServiceHandler) RetrieveListOfFiles(context.Context, *connect.Request[filetransfer.ActionRequest]) (*connect.Response[filetransfer.FileList], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("filetransfer.FileService.RetrieveListOfFiles is not implemented"))
 }

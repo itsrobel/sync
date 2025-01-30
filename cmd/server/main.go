@@ -162,6 +162,31 @@ func (s *FileTransferServer) Greet(
 	return response, nil
 }
 
+func (s *FileTransferServer) RetrieveListOfFiles(
+	ctx context.Context,
+	req *connect.Request[ft.ActionRequest],
+) (*connect.Response[ft.FileList], error) {
+	docs, err := sql_manager.GetAllFiles(s.db)
+	if err != nil {
+		return nil, err
+	}
+
+	files := make([]*ft.File, len(docs))
+	for idx, doc := range docs {
+		files[idx] = &ft.File{
+			ID:       doc.ID,
+			Active:   doc.Active,
+			Location: doc.Location,
+			Content:  doc.Content,
+		}
+	}
+	log.Println(files)
+
+	return connect.NewResponse(&ft.FileList{
+		Files: files,
+	}), nil
+}
+
 func (s *FileTransferServer) ControlStream(
 	ctx context.Context,
 	stream *connect.BidiStream[ft.ControlMessage, ft.ControlMessage],

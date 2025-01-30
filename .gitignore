@@ -2,6 +2,7 @@
 bin/
 node_modules/
 web/public/css/main.css
-web/public/js/index.js
+web/public/js/edit.js
+web/public/js/draw.js
 
 */templates/*_templ.go

@@ -7,8 +7,10 @@ option go_package = "github.com/itsrobel/sync/internal/services/filetransfer";
 service FileService {
   rpc ControlStream(stream ControlMessage) returns (stream ControlMessage) {};
   rpc SendFileToServer(stream FileVersionData) returns (ActionResponse) {};
-  rpc Greet(GreetRequest) returns (GreetResponse) {}
+  rpc Greet(GreetRequest) returns (GreetResponse) {};
+  rpc RetrieveListOfFiles(ActionRequest) returns (FileList) {};
 }
+
 // TODO: I need to get file differences
 // TODO: add the directory watching to the grpc
 message FileVersionData {
@@ -21,6 +23,18 @@ message FileVersionData {
   int64 offset = 7;     // Offset for streaming
   int64 total_size = 8; // Total size of the file
 }
+
+message File {
+  string ID = 1;
+  bool Active = 2;
+  string location = 3;
+  string content = 4;
+}
+
+message FileList {
+  repeated File files = 1;
+}
+
 
 
 //NOTE: control messages are between the client and server
@@ -43,8 +57,12 @@ message ControlMessage {
     }
 }
 
-
 message ActionResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ActionRequest {
   bool success = 1;
   string message = 2;
 }
