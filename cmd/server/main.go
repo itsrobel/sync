@@ -90,8 +90,8 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	sql_manager.DeleteAllFiles(db)
-	sql_manager.DeleteAllFileVersions(db)
+	// sql_manager.DeleteAllFiles(db)
+	// sql_manager.DeleteAllFileVersions(db)
 	filetransfer := NewFileTransferServer(db)
 
 	mux := http.NewServeMux()
